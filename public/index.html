@@ -76,6 +76,46 @@
       <button type="button" id="add-property-btn" class="secondary-btn full">+ Add apartment</button>
     </section>
 
+    <section id="tab-networth" class="tab-panel">
+      <h2 class="panel-title">Net Worth</h2>
+      <p class="panel-lede">Everything you own against everything you owe. A Real Estate investment can link to an apartment from Income, so it's entered once and its name always stays in sync.</p>
+
+      <div class="budget-card" style="text-align:center">
+        <div id="networth-total" class="budget-remaining">AED 0</div>
+        <div class="budget-remaining-label">net worth</div>
+        <div class="budget-stats">
+          <div class="budget-stat"><span id="networth-assets-total">0</span><label>Assets</label></div>
+          <div class="budget-stat"><span id="networth-liabilities-total">0</span><label>You owe</label></div>
+        </div>
+      </div>
+
+      <div class="pie-wrap">
+        <svg viewBox="0 0 200 200" class="pie-svg"><g id="networth-pie"></g></svg>
+        <div class="pie-center">
+          <div id="networth-pie-total" class="pie-total">0</div>
+          <div class="pie-label">in assets</div>
+        </div>
+      </div>
+      <div id="networth-pie-empty" class="pie-empty hidden">Nothing added yet.</div>
+      <div id="networth-legend" class="list"></div>
+
+      <div class="section-title">Investments</div>
+      <div id="investments-list" class="list"></div>
+      <button type="button" id="add-investment-btn" class="secondary-btn full">+ Add investment</button>
+
+      <div class="section-title">Cash &amp; Bank</div>
+      <div id="cash-accounts-list" class="list"></div>
+      <button type="button" id="add-cash-account-btn" class="secondary-btn full">+ Add account</button>
+
+      <div class="section-title">Money owed to you</div>
+      <div id="receivables-list" class="list"></div>
+      <button type="button" id="add-receivable-btn" class="secondary-btn full">+ Add</button>
+
+      <div class="section-title">Money you owe</div>
+      <div id="payables-list" class="list"></div>
+      <button type="button" id="add-payable-btn" class="secondary-btn full">+ Add</button>
+    </section>
+
     <section id="tab-budgets" class="tab-panel">
       <div class="panel-head">
         <h2 class="panel-title">Budgets</h2>
@@ -155,6 +195,7 @@
   <nav class="tabbar">
     <button data-tab="overview"><span class="tab-icon">📊</span>Overview</button>
     <button data-tab="income"><span class="tab-icon">💵</span>Income</button>
+    <button data-tab="networth"><span class="tab-icon">🏦</span>Worth</button>
     <button data-tab="budgets"><span class="tab-icon">🗂️</span>Budgets</button>
     <button data-tab="expenses"><span class="tab-icon">🧾</span>Expenses</button>
     <button data-tab="share"><span class="tab-icon">🔗</span>Share</button>
@@ -209,6 +250,80 @@
       </label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="property-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Investment editor -->
+<div id="investment-modal" class="modal hidden" data-close-modal="investment-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="investment-title">Add investment</h3>
+      <button class="icon-btn" data-close-modal="investment-modal">✕</button>
+    </div>
+    <form id="investment-form">
+      <label class="field">Category
+        <select name="category" id="investment-category-select"></select>
+      </label>
+      <div id="investment-link-row" class="field hidden">Link to an apartment
+        <select name="propertyId" id="investment-property-select"></select>
+        <p class="field-hint">Keeps this investment's name in sync with that apartment in Income. Leave as "Not linked" for real estate you're not tracking as rental income there.</p>
+      </div>
+      <label class="field" id="investment-name-row">Name<input name="name" type="text" placeholder="e.g. Apple stock, Gold bars" /></label>
+      <p id="investment-linked-note" class="field-hint hidden"></p>
+      <label class="field">Current value<input name="value" type="number" step="any" min="0" required /></label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="investment-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Cash & bank account editor -->
+<div id="cash-account-modal" class="modal hidden" data-close-modal="cash-account-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="cash-account-title">Add account</h3>
+      <button class="icon-btn" data-close-modal="cash-account-modal">✕</button>
+    </div>
+    <form id="cash-account-form">
+      <label class="field">Name<input name="name" type="text" placeholder="e.g. ENBD Savings, Cash on hand" required /></label>
+      <label class="field">Balance<input name="balance" type="number" step="any" min="0" required /></label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="cash-account-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Money owed to you -->
+<div id="receivable-modal" class="modal hidden" data-close-modal="receivable-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="receivable-title">Add</h3>
+      <button class="icon-btn" data-close-modal="receivable-modal">✕</button>
+    </div>
+    <form id="receivable-form">
+      <label class="field">Who owes you<input name="who" type="text" placeholder="e.g. Ahmed" required /></label>
+      <label class="field">Amount<input name="amount" type="number" step="any" min="0" required /></label>
+      <label class="field">Note (optional)<input name="note" type="text" maxlength="140" /></label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="receivable-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Money you owe -->
+<div id="payable-modal" class="modal hidden" data-close-modal="payable-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="payable-title">Add</h3>
+      <button class="icon-btn" data-close-modal="payable-modal">✕</button>
+    </div>
+    <form id="payable-form">
+      <label class="field">Who you owe<input name="who" type="text" placeholder="e.g. Bank loan, Ahmed" required /></label>
+      <label class="field">Amount<input name="amount" type="number" step="any" min="0" required /></label>
+      <label class="field">Note (optional)<input name="note" type="text" maxlength="140" /></label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="payable-delete" class="danger-btn full hidden">Delete</button>
     </form>
   </div>
 </div>

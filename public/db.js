@@ -9,6 +9,11 @@ const DEFAULT_CATEGORIES = [
   'Entertainment', 'Health', 'Savings', 'Other'
 ];
 
+const INVESTMENT_CATEGORIES = [
+  'Real Estate', 'Stocks & Funds', 'Business', 'Gold & Precious Metals',
+  'Vehicles', 'Crypto', 'Other'
+];
+
 // A handful of distinct hues, reused in the same order everywhere a category
 // needs a color (budgets list, expenses pie, the shared viewer) so a category
 // never changes color between screens.
@@ -69,6 +74,10 @@ function seedStore() {
     sheets: [{ id: key, name: monthLabel(key), createdAt: Date.now() }],
     activeSheetId: key,
     expenses: [],
+    investments: [],
+    cashAccounts: [],
+    receivables: [],
+    payables: [],
     share: null, // { serverUrl, code, token, enabled }
     calendarMonths: true
   };
@@ -123,6 +132,10 @@ function loadDb() {
       if (!parsed.categories) parsed.categories = [];
       if (!parsed.sheets) parsed.sheets = [];
       if (!parsed.expenses) parsed.expenses = [];
+      if (!parsed.investments) parsed.investments = [];
+      if (!parsed.cashAccounts) parsed.cashAccounts = [];
+      if (!parsed.receivables) parsed.receivables = [];
+      if (!parsed.payables) parsed.payables = [];
       if (parsed.share === undefined) parsed.share = null;
       migrateToCalendarMonths(parsed);
       migratePropertyIncomeFields(parsed);
@@ -223,7 +236,153 @@ const db = {
 
   async deleteProperty(id) {
     const store = loadDb();
+    const property = store.properties.find(p => p.id === id);
     store.properties = store.properties.filter(p => p.id !== id);
+    // A net-worth investment linked to this apartment survives the apartment
+    // being removed from Income - it just freezes onto the last known name
+    // instead of vanishing or pointing at nothing.
+    if (property) {
+      store.investments.forEach(inv => {
+        if (inv.propertyId === id) {
+          inv.propertyId = null;
+          inv.name = property.name;
+        }
+      });
+    }
+    saveDb(store);
+  },
+
+  // ---- Net worth: investments ----
+  // A "Real Estate" investment can optionally link to an apartment already
+  // tracked in Income (propertyId) - when linked, its display name always
+  // follows the property's own name rather than a separately-typed copy, so
+  // renaming the apartment in Income can't leave the net worth side stale.
+
+  async getInvestments() {
+    return loadDb().investments;
+  },
+
+  async addInvestment({ name, category, value, propertyId }) {
+    const store = loadDb();
+    const investment = {
+      id: uid(),
+      name: (name || '').trim() || 'Investment',
+      category: INVESTMENT_CATEGORIES.includes(category) ? category : 'Other',
+      value: Number(value) || 0,
+      propertyId: propertyId || null
+    };
+    store.investments.push(investment);
+    saveDb(store);
+    return investment;
+  },
+
+  async updateInvestment(id, { name, category, value, propertyId }) {
+    const store = loadDb();
+    const investment = store.investments.find(i => i.id === id);
+    if (!investment) return null;
+    investment.name = (name || '').trim() || 'Investment';
+    investment.category = INVESTMENT_CATEGORIES.includes(category) ? category : 'Other';
+    investment.value = Number(value) || 0;
+    investment.propertyId = propertyId || null;
+    saveDb(store);
+    return investment;
+  },
+
+  async deleteInvestment(id) {
+    const store = loadDb();
+    store.investments = store.investments.filter(i => i.id !== id);
+    saveDb(store);
+  },
+
+  // ---- Net worth: cash & bank ----
+
+  async getCashAccounts() {
+    return loadDb().cashAccounts;
+  },
+
+  async addCashAccount({ name, balance }) {
+    const store = loadDb();
+    const account = { id: uid(), name: (name || '').trim() || 'Account', balance: Number(balance) || 0 };
+    store.cashAccounts.push(account);
+    saveDb(store);
+    return account;
+  },
+
+  async updateCashAccount(id, { name, balance }) {
+    const store = loadDb();
+    const account = store.cashAccounts.find(a => a.id === id);
+    if (!account) return null;
+    account.name = (name || '').trim() || 'Account';
+    account.balance = Number(balance) || 0;
+    saveDb(store);
+    return account;
+  },
+
+  async deleteCashAccount(id) {
+    const store = loadDb();
+    store.cashAccounts = store.cashAccounts.filter(a => a.id !== id);
+    saveDb(store);
+  },
+
+  // ---- Net worth: money owed to you (receivables) ----
+
+  async getReceivables() {
+    return loadDb().receivables;
+  },
+
+  async addReceivable({ who, amount, note }) {
+    const store = loadDb();
+    const receivable = { id: uid(), who: (who || '').trim() || 'Someone', amount: Number(amount) || 0, note: (note || '').trim() };
+    store.receivables.push(receivable);
+    saveDb(store);
+    return receivable;
+  },
+
+  async updateReceivable(id, { who, amount, note }) {
+    const store = loadDb();
+    const receivable = store.receivables.find(r => r.id === id);
+    if (!receivable) return null;
+    receivable.who = (who || '').trim() || 'Someone';
+    receivable.amount = Number(amount) || 0;
+    receivable.note = (note || '').trim();
+    saveDb(store);
+    return receivable;
+  },
+
+  async deleteReceivable(id) {
+    const store = loadDb();
+    store.receivables = store.receivables.filter(r => r.id !== id);
+    saveDb(store);
+  },
+
+  // ---- Net worth: money you owe (payables) ----
+
+  async getPayables() {
+    return loadDb().payables;
+  },
+
+  async addPayable({ who, amount, note }) {
+    const store = loadDb();
+    const payable = { id: uid(), who: (who || '').trim() || 'Someone', amount: Number(amount) || 0, note: (note || '').trim() };
+    store.payables.push(payable);
+    saveDb(store);
+    return payable;
+  },
+
+  async updatePayable(id, { who, amount, note }) {
+    const store = loadDb();
+    const payable = store.payables.find(p => p.id === id);
+    if (!payable) return null;
+    payable.who = (who || '').trim() || 'Someone';
+    payable.amount = Number(amount) || 0;
+    payable.note = (note || '').trim();
+    saveDb(store);
+    return payable;
+  },
+
+  async deletePayable(id) {
+    const store = loadDb();
+    store.payables = store.payables.filter(p => p.id !== id);
     saveDb(store);
   },
 
@@ -373,7 +532,11 @@ const db = {
       categories: store.categories,
       sheets: store.sheets,
       activeSheetId: store.activeSheetId,
-      expenses: store.expenses
+      expenses: store.expenses,
+      investments: store.investments,
+      cashAccounts: store.cashAccounts,
+      receivables: store.receivables,
+      payables: store.payables
     };
   },
 
@@ -381,7 +544,7 @@ const db = {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('That file is not a Budget Tracker backup.');
     }
-    const { incomeSources, properties, categories, expenses } = payload;
+    const { incomeSources, properties, categories, expenses, investments, cashAccounts, receivables, payables } = payload;
     if (!Array.isArray(categories) || !Array.isArray(expenses)) {
       throw new Error('That file is missing budget data, so it is not a Budget Tracker backup.');
     }
@@ -390,6 +553,10 @@ const db = {
     store.properties = Array.isArray(properties) ? properties : [];
     store.categories = categories;
     store.expenses = expenses;
+    store.investments = Array.isArray(investments) ? investments : [];
+    store.cashAccounts = Array.isArray(cashAccounts) ? cashAccounts : [];
+    store.receivables = Array.isArray(receivables) ? receivables : [];
+    store.payables = Array.isArray(payables) ? payables : [];
     // Re-derive each month's sheet from the imported expenses' own dates,
     // the same as the one-time migration - correct however old the backup is.
     store.sheets = [];
@@ -402,7 +569,8 @@ const db = {
       properties: store.properties.length,
       categories: store.categories.length,
       sheets: store.sheets.length,
-      expenses: store.expenses.length
+      expenses: store.expenses.length,
+      investments: store.investments.length
     };
   }
 };

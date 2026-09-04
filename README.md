@@ -34,6 +34,16 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
   one category at a time.
 - **Overview** — total monthly and yearly income, a budget-remaining gauge
   for the active sheet, and every category's spend-vs-budget in one place.
+- **Net Worth** — everything you own against everything you owe: investments
+  by category (Real Estate, Stocks & Funds, Business, Gold, Vehicles,
+  Crypto, or your own "Other"), cash & bank accounts, money owed to you,
+  and money you owe, with a pie chart of asset composition. A Real Estate
+  investment can link to an apartment already tracked in Income — its name
+  then always follows that apartment's own name, and each property in
+  Income shows its linked net-worth value (or a one-tap prompt to add one)
+  right on its card, so the two stay in sync from either side. Unlinking
+  never loses data: deleting an apartment freezes its investment's name
+  instead of deleting the investment too.
 - **Share** — turn on a live, read-only link. It needs a server, and there's
   a free one included: `npm run api:setup && npm run api:deploy` puts a
   Cloudflare Worker and a D1 database on your own Cloudflare account, which

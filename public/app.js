@@ -13,12 +13,20 @@ const state = {
   sheets: [],
   activeSheetId: null,
   expenses: [],
+  investments: [],
+  cashAccounts: [],
+  receivables: [],
+  payables: [],
   activeTab: 'overview',
   expenseFilter: 'all',
   editingIncomeSource: null,
   editingProperty: null,
   editingCategory: null,
-  editingExpense: null
+  editingExpense: null,
+  editingInvestment: null,
+  editingCashAccount: null,
+  editingReceivable: null,
+  editingPayable: null
 };
 
 let sharePushTimer = null;
@@ -99,6 +107,50 @@ function sheetExpenses(sheetId) {
 
 function categorySpent(sheetId, categoryId) {
   return sheetExpenses(sheetId).filter(e => e.categoryId === categoryId).reduce((s, e) => s + e.amount, 0);
+}
+
+// ---- Net worth math ----
+// A "Real Estate" investment linked to an apartment (propertyId) always
+// displays that apartment's current name - never a separately-typed copy -
+// so renaming it in Income can't leave the net worth side stale. Its own
+// `name` field is only the fallback used once it's unlinked (see
+// db.deleteProperty).
+function investmentDisplayName(investment) {
+  const linked = investment.propertyId && state.properties.find(p => p.id === investment.propertyId);
+  return linked ? linked.name : investment.name;
+}
+
+function investmentCategoryColor(category) {
+  const idx = INVESTMENT_CATEGORIES.indexOf(category);
+  return CATEGORY_PALETTE[(idx < 0 ? 0 : idx) % CATEGORY_PALETTE.length];
+}
+
+function linkedInvestmentFor(propertyId) {
+  return state.investments.find(i => i.propertyId === propertyId);
+}
+
+function investmentsTotal() {
+  return state.investments.reduce((s, i) => s + (i.value || 0), 0);
+}
+
+function cashTotal() {
+  return state.cashAccounts.reduce((s, a) => s + (a.balance || 0), 0);
+}
+
+function receivablesTotal() {
+  return state.receivables.reduce((s, r) => s + (r.amount || 0), 0);
+}
+
+function payablesTotal() {
+  return state.payables.reduce((s, p) => s + (p.amount || 0), 0);
+}
+
+function assetsTotal() {
+  return investmentsTotal() + cashTotal() + receivablesTotal();
+}
+
+function netWorthTotal() {
+  return assetsTotal() - payablesTotal();
 }
 
 function categoryName(categoryId) {
@@ -213,8 +265,93 @@ function renderIncome() {
           </button>
         </div>
         <div class="item-card-value${p.vacant ? ' muted' : ''}">${formatMoney(propertyMonthly(p))} <span class="item-card-sub" style="display:inline">/ month${p.vacant ? ' (vacant)' : ''}</span></div>
+        ${propertyNetWorthRow(p)}
       </div>`).join('')
     : `<div class="empty-hint">No apartments added yet.</div>`;
+}
+
+// The bridge between Income and Net Worth: shown on every property card, so
+// an apartment's current market value is one tap away from wherever you're
+// looking at its rental income, in either direction.
+function propertyNetWorthRow(property) {
+  const linked = linkedInvestmentFor(property.id);
+  return linked
+    ? `<button type="button" class="linked-networth-row edit-linked-investment-btn" data-id="${linked.id}">🏦 Net worth value: <strong>${formatMoney(linked.value)}</strong> ›</button>`
+    : `<button type="button" class="linked-networth-row add-linked-investment-btn" data-property-id="${property.id}">+ Add this apartment's value to Net Worth ›</button>`;
+}
+
+// ---- Render: Net Worth ----
+
+function renderNetWorth() {
+  const netWorth = netWorthTotal();
+  document.getElementById('networth-total').textContent = formatMoney(netWorth);
+  document.getElementById('networth-total').classList.toggle('negative', netWorth < 0);
+  document.getElementById('networth-assets-total').textContent = formatMoney(assetsTotal());
+  document.getElementById('networth-liabilities-total').textContent = formatMoney(payablesTotal());
+
+  const segments = [
+    ...INVESTMENT_CATEGORIES.map(cat => ({
+      label: cat,
+      value: state.investments.filter(i => i.category === cat).reduce((s, i) => s + (i.value || 0), 0),
+      color: investmentCategoryColor(cat)
+    })),
+    { label: 'Cash & Bank', value: cashTotal(), color: 'var(--accent)' },
+    { label: 'Money owed to you', value: receivablesTotal(), color: 'var(--text-dim)' }
+  ].filter(s => s.value > 0);
+  const assets = assetsTotal();
+  document.getElementById('networth-pie').innerHTML = buildPie(segments);
+  document.getElementById('networth-pie-total').textContent = formatMoney(assets);
+  document.getElementById('networth-pie-empty').classList.toggle('hidden', assets > 0);
+  renderLegend('networth-legend', segments, assets);
+
+  const investmentsList = document.getElementById('investments-list');
+  investmentsList.innerHTML = state.investments.length
+    ? state.investments.map(i => `
+      <div class="item-card" data-investment-id="${i.id}">
+        <div class="item-card-head">
+          <button type="button" class="entry-info edit-investment-btn" data-id="${i.id}">
+            <h3>${escapeHtml(investmentDisplayName(i))}${i.propertyId ? '<span class="tag share">🔗 linked</span>' : ''}</h3>
+            <div class="item-card-sub">${escapeHtml(i.category)}</div>
+          </button>
+        </div>
+        <div class="item-card-value">${formatMoney(i.value)}</div>
+      </div>`).join('')
+    : `<div class="empty-hint">No investments added yet.</div>`;
+
+  const cashList = document.getElementById('cash-accounts-list');
+  cashList.innerHTML = state.cashAccounts.length
+    ? state.cashAccounts.map(a => `
+      <div class="entry-row">
+        <button type="button" class="entry-info edit-cash-account-btn" data-id="${a.id}">
+          <div class="entry-name">${escapeHtml(a.name)}</div>
+        </button>
+        <span class="entry-amount">${formatMoney(a.balance)}</span>
+      </div>`).join('')
+    : `<div class="empty-hint">No cash or bank accounts added yet.</div>`;
+
+  const receivablesList = document.getElementById('receivables-list');
+  receivablesList.innerHTML = state.receivables.length
+    ? state.receivables.map(r => `
+      <div class="entry-row">
+        <button type="button" class="entry-info edit-receivable-btn" data-id="${r.id}">
+          <div class="entry-name">${escapeHtml(r.who)}</div>
+          ${r.note ? `<div class="entry-sub">${escapeHtml(r.note)}</div>` : ''}
+        </button>
+        <span class="entry-amount">${formatMoney(r.amount)}</span>
+      </div>`).join('')
+    : `<div class="empty-hint">Nobody owes you anything logged here.</div>`;
+
+  const payablesList = document.getElementById('payables-list');
+  payablesList.innerHTML = state.payables.length
+    ? state.payables.map(p => `
+      <div class="entry-row">
+        <button type="button" class="entry-info edit-payable-btn" data-id="${p.id}">
+          <div class="entry-name">${escapeHtml(p.who)}</div>
+          ${p.note ? `<div class="entry-sub">${escapeHtml(p.note)}</div>` : ''}
+        </button>
+        <span class="entry-amount">${formatMoney(p.amount)}</span>
+      </div>`).join('')
+    : `<div class="empty-hint">You don't owe anything logged here.</div>`;
 }
 
 // ---- Render: Budgets ----
@@ -347,6 +484,7 @@ function render() {
 
   renderOverview();
   if (state.activeTab === 'income') renderIncome();
+  if (state.activeTab === 'networth') renderNetWorth();
   if (state.activeTab === 'budgets') renderBudgets();
   if (state.activeTab === 'expenses') renderExpenses();
   if (state.activeTab === 'share') renderShare();
@@ -354,6 +492,11 @@ function render() {
   const catSelect = document.getElementById('expense-category-select');
   catSelect.innerHTML = `<option value="">Uncategorized</option>` +
     state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+  document.getElementById('investment-category-select').innerHTML =
+    INVESTMENT_CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  document.getElementById('investment-property-select').innerHTML = `<option value="">Not linked</option>` +
+    state.properties.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
 
   queueSharePush();
 }
@@ -506,16 +649,104 @@ function openExpenseModal(expense) {
   openModal('expense-modal');
 }
 
+// ---- Net worth modals ----
+
+// Real Estate is the only category that can link to an apartment; once
+// linked, the Name field is replaced with a note, since the name then
+// always follows the apartment's own name instead of being typed here.
+function updateInvestmentFormVisibility() {
+  const form = document.getElementById('investment-form');
+  const isRealEstate = form.category.value === 'Real Estate';
+  document.getElementById('investment-link-row').classList.toggle('hidden', !isRealEstate);
+  if (!isRealEstate) form.propertyId.value = '';
+
+  const linkedPropertyId = isRealEstate ? form.propertyId.value : '';
+  document.getElementById('investment-name-row').classList.toggle('hidden', !!linkedPropertyId);
+  const noteEl = document.getElementById('investment-linked-note');
+  if (linkedPropertyId) {
+    const property = state.properties.find(p => p.id === linkedPropertyId);
+    noteEl.textContent = `Name follows "${property ? property.name : 'this apartment'}" from Income.`;
+    noteEl.classList.remove('hidden');
+  } else {
+    noteEl.classList.add('hidden');
+  }
+}
+
+function openInvestmentModal(investment, prefillPropertyId) {
+  state.editingInvestment = investment ? investment.id : null;
+  document.getElementById('investment-title').textContent = investment ? 'Edit investment' : 'Add investment';
+  const form = document.getElementById('investment-form');
+  form.reset();
+  if (investment) {
+    form.category.value = investment.category;
+    form.propertyId.value = investment.propertyId || '';
+    form.name.value = investmentDisplayName(investment);
+    form.value.value = investment.value;
+  } else if (prefillPropertyId) {
+    form.category.value = 'Real Estate';
+    form.propertyId.value = prefillPropertyId;
+  }
+  updateInvestmentFormVisibility();
+  document.getElementById('investment-delete').classList.toggle('hidden', !investment);
+  openModal('investment-modal');
+}
+
+function openCashAccountModal(account) {
+  state.editingCashAccount = account ? account.id : null;
+  document.getElementById('cash-account-title').textContent = account ? 'Edit account' : 'Add account';
+  const form = document.getElementById('cash-account-form');
+  form.reset();
+  if (account) {
+    form.name.value = account.name;
+    form.balance.value = account.balance;
+  }
+  document.getElementById('cash-account-delete').classList.toggle('hidden', !account);
+  openModal('cash-account-modal');
+}
+
+function openReceivableModal(receivable) {
+  state.editingReceivable = receivable ? receivable.id : null;
+  document.getElementById('receivable-title').textContent = receivable ? 'Edit' : 'Add';
+  const form = document.getElementById('receivable-form');
+  form.reset();
+  if (receivable) {
+    form.who.value = receivable.who;
+    form.amount.value = receivable.amount;
+    form.note.value = receivable.note || '';
+  }
+  document.getElementById('receivable-delete').classList.toggle('hidden', !receivable);
+  openModal('receivable-modal');
+}
+
+function openPayableModal(payable) {
+  state.editingPayable = payable ? payable.id : null;
+  document.getElementById('payable-title').textContent = payable ? 'Edit' : 'Add';
+  const form = document.getElementById('payable-form');
+  form.reset();
+  if (payable) {
+    form.who.value = payable.who;
+    form.amount.value = payable.amount;
+    form.note.value = payable.note || '';
+  }
+  document.getElementById('payable-delete').classList.toggle('hidden', !payable);
+  openModal('payable-modal');
+}
+
 // ---- Data refresh ----
 
 async function refreshAll() {
-  state.settings = await db.getSettings();
-  state.incomeSources = await db.getIncomeSources();
-  state.properties = await db.getProperties();
-  state.categories = await db.getCategories();
-  state.sheets = await db.getSheets();
-  state.activeSheetId = await db.getActiveSheetId();
-  state.expenses = (await db.getAll()).expenses;
+  const all = await db.getAll();
+  state.settings = all.settings;
+  state.incomeSources = all.incomeSources;
+  state.properties = all.properties;
+  state.categories = all.categories;
+  state.sheets = all.sheets;
+  state.activeSheetId = all.activeSheetId;
+  state.expenses = all.expenses;
+  state.investments = all.investments;
+  state.cashAccounts = all.cashAccounts;
+  state.receivables = all.receivables;
+  state.payables = all.payables;
   render();
 }
 
@@ -554,8 +785,12 @@ function wireEvents() {
 
   document.getElementById('add-property-btn').addEventListener('click', () => openPropertyModal(null));
   document.getElementById('properties-list').addEventListener('click', e => {
-    const btn = e.target.closest('.edit-property-btn');
-    if (btn) openPropertyModal(state.properties.find(p => p.id === btn.dataset.id));
+    const editBtn = e.target.closest('.edit-property-btn');
+    if (editBtn) { openPropertyModal(state.properties.find(p => p.id === editBtn.dataset.id)); return; }
+    const linkedBtn = e.target.closest('.edit-linked-investment-btn');
+    if (linkedBtn) { openInvestmentModal(state.investments.find(i => i.id === linkedBtn.dataset.id)); return; }
+    const addLinkedBtn = e.target.closest('.add-linked-investment-btn');
+    if (addLinkedBtn) openInvestmentModal(null, addLinkedBtn.dataset.propertyId);
   });
   document.getElementById('property-form').addEventListener('input', e => {
     if (e.target.name === 'annualGrossIncome' || e.target.name === 'annualServiceCharges') updatePropertyNetPreview();
@@ -579,6 +814,98 @@ function wireEvents() {
     if (state.editingProperty && confirm('Delete this apartment?')) {
       await db.deleteProperty(state.editingProperty);
       closeModal('property-modal');
+      await refreshAll();
+    }
+  });
+
+  // Net Worth tab
+  document.getElementById('add-investment-btn').addEventListener('click', () => openInvestmentModal(null));
+  document.getElementById('investments-list').addEventListener('click', e => {
+    const btn = e.target.closest('.edit-investment-btn');
+    if (btn) openInvestmentModal(state.investments.find(i => i.id === btn.dataset.id));
+  });
+  document.getElementById('investment-form').addEventListener('change', e => {
+    if (e.target.name === 'category' || e.target.name === 'propertyId') updateInvestmentFormVisibility();
+  });
+  document.getElementById('investment-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = { name: f.get('name'), category: f.get('category'), value: f.get('value'), propertyId: f.get('propertyId') || null };
+    if (state.editingInvestment) await db.updateInvestment(state.editingInvestment, payload);
+    else await db.addInvestment(payload);
+    closeModal('investment-modal');
+    await refreshAll();
+  });
+  document.getElementById('investment-delete').addEventListener('click', async () => {
+    if (state.editingInvestment && confirm('Delete this investment?')) {
+      await db.deleteInvestment(state.editingInvestment);
+      closeModal('investment-modal');
+      await refreshAll();
+    }
+  });
+
+  document.getElementById('add-cash-account-btn').addEventListener('click', () => openCashAccountModal(null));
+  document.getElementById('cash-accounts-list').addEventListener('click', e => {
+    const btn = e.target.closest('.edit-cash-account-btn');
+    if (btn) openCashAccountModal(state.cashAccounts.find(a => a.id === btn.dataset.id));
+  });
+  document.getElementById('cash-account-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = { name: f.get('name'), balance: f.get('balance') };
+    if (state.editingCashAccount) await db.updateCashAccount(state.editingCashAccount, payload);
+    else await db.addCashAccount(payload);
+    closeModal('cash-account-modal');
+    await refreshAll();
+  });
+  document.getElementById('cash-account-delete').addEventListener('click', async () => {
+    if (state.editingCashAccount && confirm('Delete this account?')) {
+      await db.deleteCashAccount(state.editingCashAccount);
+      closeModal('cash-account-modal');
+      await refreshAll();
+    }
+  });
+
+  document.getElementById('add-receivable-btn').addEventListener('click', () => openReceivableModal(null));
+  document.getElementById('receivables-list').addEventListener('click', e => {
+    const btn = e.target.closest('.edit-receivable-btn');
+    if (btn) openReceivableModal(state.receivables.find(r => r.id === btn.dataset.id));
+  });
+  document.getElementById('receivable-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = { who: f.get('who'), amount: f.get('amount'), note: f.get('note') };
+    if (state.editingReceivable) await db.updateReceivable(state.editingReceivable, payload);
+    else await db.addReceivable(payload);
+    closeModal('receivable-modal');
+    await refreshAll();
+  });
+  document.getElementById('receivable-delete').addEventListener('click', async () => {
+    if (state.editingReceivable && confirm('Delete this?')) {
+      await db.deleteReceivable(state.editingReceivable);
+      closeModal('receivable-modal');
+      await refreshAll();
+    }
+  });
+
+  document.getElementById('add-payable-btn').addEventListener('click', () => openPayableModal(null));
+  document.getElementById('payables-list').addEventListener('click', e => {
+    const btn = e.target.closest('.edit-payable-btn');
+    if (btn) openPayableModal(state.payables.find(p => p.id === btn.dataset.id));
+  });
+  document.getElementById('payable-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = { who: f.get('who'), amount: f.get('amount'), note: f.get('note') };
+    if (state.editingPayable) await db.updatePayable(state.editingPayable, payload);
+    else await db.addPayable(payload);
+    closeModal('payable-modal');
+    await refreshAll();
+  });
+  document.getElementById('payable-delete').addEventListener('click', async () => {
+    if (state.editingPayable && confirm('Delete this?')) {
+      await db.deletePayable(state.editingPayable);
+      closeModal('payable-modal');
       await refreshAll();
     }
   });
@@ -726,7 +1053,7 @@ function wireEvents() {
     try {
       const text = await file.text();
       const result = await db.importData(JSON.parse(text));
-      alert(`Restored ${result.categories} categories, ${result.sheets} sheets, ${result.expenses} expenses.`);
+      alert(`Restored ${result.categories} categories, ${result.sheets} sheets, ${result.expenses} expenses, ${result.investments} investments.`);
       closeModal('settings-modal');
       await refreshAll();
     } catch (err) {
