@@ -315,19 +315,19 @@ body {
 }
 .chip.active { background: var(--accent); color: var(--accent-ink); }
 
-.sheet-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.sheet-select {
-  flex: 1;
-  padding: 12px 14px;
+.date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--card-2);
-  color: var(--text);
-  font-size: 14.5px;
-  font-weight: 700;
-  -webkit-appearance: none;
-  appearance: none;
+  border-radius: var(--r-pill);
+  padding: 6px;
+  margin: 0 auto 16px;
+  width: fit-content;
 }
+.date-label { font-weight: 700; font-size: 15px; min-width: 160px; text-align: center; }
 
 /* Inputs / forms */
 .text-input {

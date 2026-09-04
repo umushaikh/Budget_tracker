@@ -75,7 +75,7 @@
         <h2 class="panel-title">Budgets</h2>
         <span id="budgets-remaining-hint" class="panel-sub"></span>
       </div>
-      <p class="panel-lede">Split your monthly income into categories. Each category's progress bar tracks what you've actually spent this sheet against what you budgeted for it.</p>
+      <p class="panel-lede">Split your monthly income into categories. Each category's progress bar tracks what you've actually spent this month against what you budgeted for it.</p>
       <div id="budgets-list" class="list"></div>
       <button type="button" id="add-category-btn" class="secondary-btn full">+ Add category</button>
     </section>
@@ -83,10 +83,10 @@
     <section id="tab-expenses" class="tab-panel">
       <h2 class="panel-title">Expenses</h2>
 
-      <div class="sheet-bar">
-        <select id="sheet-select" class="sheet-select"></select>
-        <button type="button" id="new-sheet-btn" class="icon-btn" title="New expense sheet">+</button>
-        <button type="button" id="delete-sheet-btn" class="icon-btn" title="Delete this sheet">🗑</button>
+      <div class="date-nav">
+        <button type="button" id="month-prev-btn" class="icon-btn" title="Previous month">‹</button>
+        <div id="month-label" class="date-label"></div>
+        <button type="button" id="month-next-btn" class="icon-btn" title="Next month">›</button>
       </div>
 
       <div class="pie-wrap">
@@ -96,7 +96,7 @@
           <div class="pie-label">spent</div>
         </div>
       </div>
-      <div id="expenses-pie-empty" class="pie-empty hidden">Nothing logged in this sheet yet.</div>
+      <div id="expenses-pie-empty" class="pie-empty hidden">Nothing logged in this month yet.</div>
       <div id="expenses-legend" class="list"></div>
 
       <div class="section-title">Filter by category</div>
@@ -217,20 +217,6 @@
       <label class="field">Monthly budget<input name="monthlyBudget" type="number" step="any" min="0" required /></label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="category-delete" class="danger-btn full hidden">Delete</button>
-    </form>
-  </div>
-</div>
-
-<!-- Expense sheet: new -->
-<div id="sheet-modal" class="modal hidden" data-close-modal="sheet-modal">
-  <div class="modal-sheet" onclick="event.stopPropagation()">
-    <div class="modal-head">
-      <h3>New expense sheet</h3>
-      <button class="icon-btn" data-close-modal="sheet-modal">✕</button>
-    </div>
-    <form id="sheet-form">
-      <label class="field">Name<input name="name" type="text" placeholder="e.g. October 2026" required /></label>
-      <button type="submit" class="primary-btn full">Create</button>
     </form>
   </div>
 </div>

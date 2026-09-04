@@ -27,22 +27,73 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function monthName() {
-  return new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+// Expense sheets are real calendar months, keyed "YYYY-MM" so they sort and
+// compare as plain strings. This is what lets a category's "monthly budget"
+// actually mean something: the sheet you're looking at IS the month.
+function currentMonthKey() {
+  return todayStr().slice(0, 7);
+}
+
+function monthKeyFromDate(dateStr) {
+  return (dateStr || todayStr()).slice(0, 7);
+}
+
+function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+}
+
+function shiftMonthKey(key, delta) {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function ensureSheet(store, key) {
+  let sheet = store.sheets.find(s => s.id === key);
+  if (!sheet) {
+    sheet = { id: key, name: monthLabel(key), createdAt: Date.now() };
+    store.sheets.push(sheet);
+    store.sheets.sort((a, b) => a.id.localeCompare(b.id));
+  }
+  return sheet;
 }
 
 function seedStore() {
-  const sheetId = uid();
+  const key = currentMonthKey();
   return {
     settings: { theme: 'dark', currency: 'AED', onboarded: false },
     incomeSources: [],
     properties: [],
     categories: DEFAULT_CATEGORIES.map(name => ({ id: uid(), name, monthlyBudget: 0 })),
-    sheets: [{ id: sheetId, name: monthName(), createdAt: Date.now() }],
-    activeSheetId: sheetId,
+    sheets: [{ id: key, name: monthLabel(key), createdAt: Date.now() }],
+    activeSheetId: key,
     expenses: [],
-    share: null // { serverUrl, code, token, enabled }
+    share: null, // { serverUrl, code, token, enabled }
+    calendarMonths: true
   };
+}
+
+// One-time migration from the original manually-named/created sheets to
+// real calendar months: every expense moves to the sheet matching its own
+// date, so history lands where it actually belongs rather than wherever it
+// happened to be entered. Idempotent - re-running it after it's already run
+// is a no-op, so it's safe to call unconditionally on every load.
+function migrateToCalendarMonths(store) {
+  if (store.calendarMonths) {
+    ensureSheet(store, currentMonthKey());
+    if (!store.sheets.some(s => s.id === store.activeSheetId)) store.activeSheetId = currentMonthKey();
+    return;
+  }
+  store.sheets = [];
+  store.expenses.forEach(e => {
+    const key = monthKeyFromDate(e.date);
+    ensureSheet(store, key);
+    e.sheetId = key;
+  });
+  ensureSheet(store, currentMonthKey());
+  store.activeSheetId = currentMonthKey();
+  store.calendarMonths = true;
 }
 
 function loadDb() {
@@ -54,16 +105,10 @@ function loadDb() {
       if (!parsed.incomeSources) parsed.incomeSources = [];
       if (!parsed.properties) parsed.properties = [];
       if (!parsed.categories) parsed.categories = [];
-      if (!parsed.sheets || !parsed.sheets.length) {
-        const sheetId = uid();
-        parsed.sheets = [{ id: sheetId, name: monthName(), createdAt: Date.now() }];
-        parsed.activeSheetId = sheetId;
-      }
-      if (!parsed.activeSheetId || !parsed.sheets.some(s => s.id === parsed.activeSheetId)) {
-        parsed.activeSheetId = parsed.sheets[0].id;
-      }
+      if (!parsed.sheets) parsed.sheets = [];
       if (!parsed.expenses) parsed.expenses = [];
       if (parsed.share === undefined) parsed.share = null;
+      migrateToCalendarMonths(parsed);
       return parsed;
     } catch {
       // fall through and reseed a fresh db below
@@ -195,7 +240,7 @@ const db = {
     saveDb(store);
   },
 
-  // ---- Expense sheets ----
+  // ---- Expense sheets (calendar months) ----
 
   async getSheets() {
     return loadDb().sheets;
@@ -205,29 +250,24 @@ const db = {
     return loadDb().activeSheetId;
   },
 
-  async setActiveSheet(id) {
+  // Moves the active month by `delta` months (±1 for prev/next), creating
+  // that month's sheet on the fly if nothing has ever been logged in it yet.
+  async shiftActiveSheet(delta) {
     const store = loadDb();
-    if (store.sheets.some(s => s.id === id)) store.activeSheetId = id;
-    saveDb(store);
-    return store.activeSheetId;
-  },
-
-  async addSheet(name) {
-    const store = loadDb();
-    const sheet = { id: uid(), name: (name || '').trim() || monthName(), createdAt: Date.now() };
-    store.sheets.push(sheet);
-    store.activeSheetId = sheet.id;
+    const key = shiftMonthKey(store.activeSheetId, delta);
+    const sheet = ensureSheet(store, key);
+    store.activeSheetId = key;
     saveDb(store);
     return sheet;
   },
 
-  async deleteSheet(id) {
+  async goToCurrentMonth() {
     const store = loadDb();
-    if (store.sheets.length <= 1) throw new Error('At least one expense sheet is required.');
-    store.sheets = store.sheets.filter(s => s.id !== id);
-    store.expenses = store.expenses.filter(e => e.sheetId !== id);
-    if (store.activeSheetId === id) store.activeSheetId = store.sheets[0].id;
+    const key = currentMonthKey();
+    const sheet = ensureSheet(store, key);
+    store.activeSheetId = key;
     saveDb(store);
+    return sheet;
   },
 
   // ---- Expenses ----
@@ -236,17 +276,26 @@ const db = {
     return loadDb().expenses.filter(e => e.sheetId === sheetId).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   },
 
-  async addExpense({ sheetId, categoryId, amount, note, date }) {
+  // The month an expense belongs to is derived from its own date, not from
+  // whichever month happened to be on screen when it was added - so it lands
+  // in the right place even if you're back-filling a past month's spending.
+  // The view follows: after saving, the active sheet becomes that date's
+  // month, so the entry is immediately visible.
+  async addExpense({ categoryId, amount, note, date }) {
     const store = loadDb();
+    const expenseDate = date || todayStr();
+    const sheetId = monthKeyFromDate(expenseDate);
+    ensureSheet(store, sheetId);
     const expense = {
       id: uid(),
       sheetId,
       categoryId: categoryId || null,
       amount: Number(amount) || 0,
       note: (note || '').trim(),
-      date: date || todayStr()
+      date: expenseDate
     };
     store.expenses.push(expense);
+    store.activeSheetId = sheetId;
     saveDb(store);
     return expense;
   },
@@ -259,6 +308,9 @@ const db = {
     expense.amount = Number(amount) || 0;
     expense.note = (note || '').trim();
     expense.date = date || expense.date;
+    expense.sheetId = monthKeyFromDate(expense.date);
+    ensureSheet(store, expense.sheetId);
+    store.activeSheetId = expense.sheetId;
     saveDb(store);
     return expense;
   },
@@ -310,18 +362,20 @@ const db = {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('That file is not a Budget Tracker backup.');
     }
-    const { incomeSources, properties, categories, sheets, expenses } = payload;
-    if (!Array.isArray(categories) || !Array.isArray(sheets) || !Array.isArray(expenses)) {
+    const { incomeSources, properties, categories, expenses } = payload;
+    if (!Array.isArray(categories) || !Array.isArray(expenses)) {
       throw new Error('That file is missing budget data, so it is not a Budget Tracker backup.');
     }
     const store = loadDb();
     store.incomeSources = Array.isArray(incomeSources) ? incomeSources : [];
     store.properties = Array.isArray(properties) ? properties : [];
     store.categories = categories;
-    store.sheets = sheets.length ? sheets : store.sheets;
-    store.activeSheetId = payload.activeSheetId && sheets.some(s => s.id === payload.activeSheetId)
-      ? payload.activeSheetId : store.sheets[0].id;
     store.expenses = expenses;
+    // Re-derive each month's sheet from the imported expenses' own dates,
+    // the same as the one-time migration - correct however old the backup is.
+    store.sheets = [];
+    store.calendarMonths = false;
+    migrateToCalendarMonths(store);
     if (payload.settings) store.settings = { ...store.settings, ...payload.settings };
     saveDb(store);
     return {

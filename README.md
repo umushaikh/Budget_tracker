@@ -22,13 +22,15 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
 - **Budgets** — split your monthly income into categories (Groceries,
   Rent, Utilities, ... or your own), each with its own monthly budget.
   A progress bar on every category tracks what you've actually spent
-  against it for the currently selected expense sheet.
+  against it for the currently viewed month.
 - **Expenses** — log expenses against a category with an amount, date, and
-  optional note. A pie chart and per-category legend show the current
-  sheet's spending at a glance; chips filter the list down to one category
-  at a time. **+ New expense sheet** starts a fresh one (a new month, a
-  separate project, whatever grouping makes sense) without losing the old
-  one — switch between sheets from the dropdown at the top of the tab.
+  optional note. ‹ › arrows move between calendar months — each one is
+  created automatically the first time you visit or log something in it,
+  and an expense always lands in the month of its own date, not whichever
+  month happened to be on screen when you added it (so back-filling a past
+  month's spending just works). A pie chart and per-category legend show
+  the current month's spending at a glance; chips filter the list down to
+  one category at a time.
 - **Overview** — total monthly and yearly income, a budget-remaining gauge
   for the active sheet, and every category's spend-vs-budget in one place.
 - **Share** — turn on a live, read-only link. It needs a server, and there's

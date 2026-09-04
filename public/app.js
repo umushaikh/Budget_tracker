@@ -242,7 +242,7 @@ function renderBudgets() {
           </div>
           <div class="progress-track"><div class="progress-fill${over ? ' over' : ''}" style="width:${pct}%"></div></div>
           <div class="progress-caption">
-            <span${over ? ' class="over-text"' : ''}>${formatMoney(spent)} spent this sheet</span>
+            <span${over ? ' class="over-text"' : ''}>${formatMoney(spent)} spent this month</span>
             <span>${pct}%</span>
           </div>
         </div>`;
@@ -253,9 +253,8 @@ function renderBudgets() {
 // ---- Render: Expenses ----
 
 function renderExpenses() {
-  const select = document.getElementById('sheet-select');
-  select.innerHTML = state.sheets.map(s => `<option value="${s.id}"${s.id === state.activeSheetId ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('');
-  document.getElementById('delete-sheet-btn').disabled = state.sheets.length <= 1;
+  const sheet = state.sheets.find(s => s.id === state.activeSheetId);
+  document.getElementById('month-label').textContent = sheet ? sheet.name : '';
 
   const all = sheetExpenses(state.activeSheetId);
   const total = all.reduce((s, e) => s + e.amount, 0);
@@ -592,35 +591,15 @@ function wireEvents() {
   });
 
   // Expenses tab
-  document.getElementById('sheet-select').addEventListener('change', async e => {
-    await db.setActiveSheet(e.target.value);
+  document.getElementById('month-prev-btn').addEventListener('click', async () => {
+    await db.shiftActiveSheet(-1);
     state.expenseFilter = 'all';
     await refreshAll();
   });
-  document.getElementById('new-sheet-btn').addEventListener('click', () => {
-    document.getElementById('sheet-form').reset();
-    openModal('sheet-modal');
-  });
-  document.getElementById('sheet-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    await db.addSheet(f.get('name'));
-    closeModal('sheet-modal');
+  document.getElementById('month-next-btn').addEventListener('click', async () => {
+    await db.shiftActiveSheet(1);
     state.expenseFilter = 'all';
     await refreshAll();
-  });
-  document.getElementById('delete-sheet-btn').addEventListener('click', async () => {
-    if (state.sheets.length <= 1) return;
-    const sheet = state.sheets.find(s => s.id === state.activeSheetId);
-    if (confirm(`Delete "${sheet.name}" and all its expenses? This cannot be undone.`)) {
-      try {
-        await db.deleteSheet(state.activeSheetId);
-        state.expenseFilter = 'all';
-        await refreshAll();
-      } catch (err) {
-        alert(err.message);
-      }
-    }
   });
   document.getElementById('expenses-filter').addEventListener('click', e => {
     const chip = e.target.closest('.chip');
@@ -636,7 +615,7 @@ function wireEvents() {
   document.getElementById('expense-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const payload = { sheetId: state.activeSheetId, categoryId: f.get('categoryId') || null, amount: f.get('amount'), note: f.get('note'), date: f.get('date') };
+    const payload = { categoryId: f.get('categoryId') || null, amount: f.get('amount'), note: f.get('note'), date: f.get('date') };
     if (state.editingExpense) await db.updateExpense(state.editingExpense, payload);
     else await db.addExpense(payload);
     closeModal('expense-modal');
