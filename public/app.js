@@ -19,6 +19,7 @@ const state = {
   receivables: [],
   payables: [],
   activeTab: 'overview',
+  incomeSegment: 'income',
   expenseFilter: 'all',
   editingIncomeSource: null,
   editingProperty: null,
@@ -238,7 +239,14 @@ function renderOverview() {
   }
 }
 
-// ---- Render: Income ----
+// ---- Render: Income & Net Worth (one tab, two segments) ----
+
+function applyIncomeSegment() {
+  document.getElementById('income-section').classList.toggle('hidden', state.incomeSegment !== 'income');
+  document.getElementById('networth-section').classList.toggle('hidden', state.incomeSegment !== 'networth');
+  document.getElementById('seg-income-btn').classList.toggle('active', state.incomeSegment === 'income');
+  document.getElementById('seg-networth-btn').classList.toggle('active', state.incomeSegment === 'networth');
+}
 
 function renderIncome() {
   const sourcesList = document.getElementById('income-sources-list');
@@ -484,8 +492,11 @@ function render() {
   document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('active', b.dataset.tab === state.activeTab));
 
   renderOverview();
-  if (state.activeTab === 'income') renderIncome();
-  if (state.activeTab === 'networth') renderNetWorth();
+  if (state.activeTab === 'income') {
+    renderIncome();
+    renderNetWorth();
+    applyIncomeSegment();
+  }
   if (state.activeTab === 'budgets') renderBudgets();
   if (state.activeTab === 'expenses') renderExpenses();
   if (state.activeTab === 'share') renderShare();
@@ -759,6 +770,13 @@ function wireEvents() {
     btn.addEventListener('click', () => {
       state.activeTab = btn.dataset.tab;
       render();
+    });
+  });
+
+  document.querySelectorAll('#tab-income .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.incomeSegment = btn.dataset.segment;
+      applyIncomeSegment();
     });
   });
 

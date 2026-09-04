@@ -64,56 +64,63 @@
     </section>
 
     <section id="tab-income" class="tab-panel">
-      <h2 class="panel-title">Income</h2>
-      <p class="panel-lede">Add your salary or other regular income, plus every apartment you earn rent from. Enter each property's gross rent and service charges per year — the net income is worked out for you — then split by however much of it you own.</p>
+      <h2 class="panel-title">Income &amp; Net Worth</h2>
 
-      <div class="section-title">Other income</div>
-      <div id="income-sources-list" class="list"></div>
-      <button type="button" id="add-income-source-btn" class="secondary-btn full">+ Add income</button>
-
-      <div class="section-title">Properties</div>
-      <div id="properties-list" class="list"></div>
-      <button type="button" id="add-property-btn" class="secondary-btn full">+ Add apartment</button>
-    </section>
-
-    <section id="tab-networth" class="tab-panel">
-      <h2 class="panel-title">Net Worth</h2>
-      <p class="panel-lede">Everything you own against everything you owe. A Real Estate investment can link to an apartment from Income, so it's entered once and its name always stays in sync.</p>
-
-      <div class="budget-card" style="text-align:center">
-        <div id="networth-total" class="budget-remaining">AED 0</div>
-        <div class="budget-remaining-label">net worth</div>
-        <div class="budget-stats">
-          <div class="budget-stat"><span id="networth-assets-total">0</span><label>Assets</label></div>
-          <div class="budget-stat"><span id="networth-liabilities-total">0</span><label>You owe</label></div>
-        </div>
+      <div class="segmented">
+        <button type="button" class="seg-btn active" data-segment="income" id="seg-income-btn">Income</button>
+        <button type="button" class="seg-btn" data-segment="networth" id="seg-networth-btn">Net Worth</button>
       </div>
 
-      <div class="pie-wrap">
-        <svg viewBox="0 0 200 200" class="pie-svg"><g id="networth-pie"></g></svg>
-        <div class="pie-center">
-          <div id="networth-pie-total" class="pie-total">0</div>
-          <div class="pie-label">in assets</div>
-        </div>
+      <div id="income-section">
+        <p class="panel-lede">Add your salary or other regular income, plus every apartment you earn rent from. Enter each property's gross rent and service charges per year — the net income is worked out for you — then split by however much of it you own.</p>
+
+        <div class="section-title">Other income</div>
+        <div id="income-sources-list" class="list"></div>
+        <button type="button" id="add-income-source-btn" class="secondary-btn full">+ Add income</button>
+
+        <div class="section-title">Properties</div>
+        <div id="properties-list" class="list"></div>
+        <button type="button" id="add-property-btn" class="secondary-btn full">+ Add apartment</button>
       </div>
-      <div id="networth-pie-empty" class="pie-empty hidden">Nothing added yet.</div>
-      <div id="networth-legend" class="list"></div>
 
-      <div class="section-title">Investments</div>
-      <div id="investments-list" class="list"></div>
-      <button type="button" id="add-investment-btn" class="secondary-btn full">+ Add investment</button>
+      <div id="networth-section" class="hidden">
+        <p class="panel-lede">Everything you own against everything you owe. A Real Estate investment can link to an apartment from Income, so it's entered once and its name always stays in sync.</p>
 
-      <div class="section-title">Cash &amp; Bank</div>
-      <div id="cash-accounts-list" class="list"></div>
-      <button type="button" id="add-cash-account-btn" class="secondary-btn full">+ Add account</button>
+        <div class="budget-card" style="text-align:center">
+          <div id="networth-total" class="budget-remaining">AED 0</div>
+          <div class="budget-remaining-label">net worth</div>
+          <div class="budget-stats">
+            <div class="budget-stat"><span id="networth-assets-total">0</span><label>Assets</label></div>
+            <div class="budget-stat"><span id="networth-liabilities-total">0</span><label>You owe</label></div>
+          </div>
+        </div>
 
-      <div class="section-title">Money owed to you</div>
-      <div id="receivables-list" class="list"></div>
-      <button type="button" id="add-receivable-btn" class="secondary-btn full">+ Add</button>
+        <div class="pie-wrap">
+          <svg viewBox="0 0 200 200" class="pie-svg"><g id="networth-pie"></g></svg>
+          <div class="pie-center">
+            <div id="networth-pie-total" class="pie-total">0</div>
+            <div class="pie-label">in assets</div>
+          </div>
+        </div>
+        <div id="networth-pie-empty" class="pie-empty hidden">Nothing added yet.</div>
+        <div id="networth-legend" class="list"></div>
 
-      <div class="section-title">Money you owe</div>
-      <div id="payables-list" class="list"></div>
-      <button type="button" id="add-payable-btn" class="secondary-btn full">+ Add</button>
+        <div class="section-title">Investments</div>
+        <div id="investments-list" class="list"></div>
+        <button type="button" id="add-investment-btn" class="secondary-btn full">+ Add investment</button>
+
+        <div class="section-title">Cash &amp; Bank</div>
+        <div id="cash-accounts-list" class="list"></div>
+        <button type="button" id="add-cash-account-btn" class="secondary-btn full">+ Add account</button>
+
+        <div class="section-title">Money owed to you</div>
+        <div id="receivables-list" class="list"></div>
+        <button type="button" id="add-receivable-btn" class="secondary-btn full">+ Add</button>
+
+        <div class="section-title">Money you owe</div>
+        <div id="payables-list" class="list"></div>
+        <button type="button" id="add-payable-btn" class="secondary-btn full">+ Add</button>
+      </div>
     </section>
 
     <section id="tab-budgets" class="tab-panel">
@@ -195,7 +202,6 @@
   <nav class="tabbar">
     <button data-tab="overview"><span class="tab-icon">📊</span>Overview</button>
     <button data-tab="income"><span class="tab-icon">💵</span>Income</button>
-    <button data-tab="networth"><span class="tab-icon">🏦</span>Worth</button>
     <button data-tab="budgets"><span class="tab-icon">🗂️</span>Budgets</button>
     <button data-tab="expenses"><span class="tab-icon">🧾</span>Expenses</button>
     <button data-tab="share"><span class="tab-icon">🔗</span>Share</button>
