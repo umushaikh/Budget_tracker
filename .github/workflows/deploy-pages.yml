@@ -1,0 +1,56 @@
+name: Deploy to GitHub Pages
+
+# Publishes public/ as the site. The app is a static PWA, so serving it
+# over https is what enables offline mode, home-screen install, and the
+# share link's viewer page. No income, budget, or expense data is involved:
+# that lives only in the browser's local storage on the device (except the
+# computed snapshot you choose to push to a share link).
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      # Gives every deploy a distinct service worker and cache name, so
+      # browsers actually pick up new versions instead of serving the old
+      # cached app indefinitely.
+      - name: Stamp the service worker and app with this commit
+        run: |
+          sed -i "s/__BUILD_ID__/${GITHUB_SHA}/" public/sw.js
+          sed -i "0,/__BUILD_ID__/s//${GITHUB_SHA}/" public/app.js
+          grep -q "budget-tracker-\${BUILD_ID}" public/sw.js && grep -q "${GITHUB_SHA}" public/sw.js \
+            && echo "stamped sw BUILD_ID=${GITHUB_SHA}" \
+            || { echo "service worker was not stamped"; exit 1; }
+          grep -q "const BUILD_ID = '${GITHUB_SHA}'" public/app.js \
+            && echo "stamped app BUILD_ID=${GITHUB_SHA}" \
+            || { echo "app.js was not stamped"; exit 1; }
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

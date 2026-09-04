@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Budget — Live View</title>
+<meta name="theme-color" content="#000000" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div id="viewer" class="viewer-page">
+  <div id="viewer-status" class="viewer-status">Loading…</div>
+
+  <div id="viewer-content" class="hidden">
+    <div class="viewer-head">
+      <div class="brand">💰 <span id="viewer-sheet-name">Budget</span></div>
+    </div>
+    <div id="viewer-updated" class="viewer-updated"></div>
+
+    <div class="income-summary">
+      <div class="income-stat"><span id="viewer-monthly-income">0</span><label>Monthly income</label></div>
+      <div class="income-stat"><span id="viewer-yearly-income">0</span><label>Yearly income</label></div>
+    </div>
+
+    <div class="budget-card">
+      <div class="budget-ring-wrap">
+        <svg class="gauge" viewBox="0 0 200 200" aria-hidden="true">
+          <circle class="gauge-track" cx="100" cy="100" r="80" stroke-dasharray="377 503"></circle>
+          <circle id="viewer-gauge-fill" class="gauge-fill" cx="100" cy="100" r="80" stroke-dasharray="0 503"></circle>
+        </svg>
+        <div class="budget-ring-inner">
+          <div id="viewer-remaining" class="budget-remaining">0</div>
+          <div class="budget-remaining-label">remaining</div>
+        </div>
+      </div>
+      <div class="budget-stats">
+        <div class="budget-stat"><span id="viewer-budgeted-total">0</span><label>Budgeted</label></div>
+        <div class="budget-stat"><span id="viewer-spent-total">0</span><label>Spent</label></div>
+      </div>
+    </div>
+
+    <div class="section-title">Budget by category</div>
+    <div id="viewer-categories" class="list"></div>
+
+    <div class="section-title">Where the income comes from</div>
+    <div id="viewer-income-breakdown" class="list"></div>
+
+    <div class="section-title">Expenses</div>
+    <div class="pie-wrap">
+      <svg viewBox="0 0 200 200" class="pie-svg"><g id="viewer-pie"></g></svg>
+      <div class="pie-center">
+        <div id="viewer-pie-total" class="pie-total">0</div>
+        <div class="pie-label">spent</div>
+      </div>
+    </div>
+    <div id="viewer-pie-empty" class="pie-empty hidden">Nothing logged yet.</div>
+    <div id="viewer-legend" class="list"></div>
+
+    <div id="viewer-filter" class="chip-row"></div>
+    <div id="viewer-expenses" class="list"></div>
+  </div>
+</div>
+
+<script src="viewer.js"></script>
+</body>
+</html>

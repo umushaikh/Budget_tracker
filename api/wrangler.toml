@@ -1,0 +1,9 @@
+name = "budget-tracker-share"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# Filled in by `npm run api:setup`, which creates the database and prints the id.
+[[d1_databases]]
+binding = "DB"
+database_name = "budget-tracker-share"
+database_id = "PLACEHOLDER_RUN_API_SETUP"

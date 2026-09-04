@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Budget Tracker</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#000000" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Budget" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div id="app" class="app">
+  <header class="topbar">
+    <div class="brand">💰 Budget Tracker</div>
+    <button id="data-btn" class="icon-btn" title="Settings &amp; backup">⚙</button>
+  </header>
+
+  <div id="onboarding-banner" class="banner hidden">
+    Welcome! Add your income under the Income tab, then set a monthly budget for each category.
+  </div>
+
+  <main class="content">
+
+    <section id="tab-overview" class="tab-panel active">
+      <h2 class="panel-title">Overview</h2>
+
+      <div class="income-summary">
+        <div class="income-stat"><span id="overview-monthly-income">0</span><label>Monthly income</label></div>
+        <div class="income-stat"><span id="overview-yearly-income">0</span><label>Yearly income</label></div>
+      </div>
+
+      <div class="budget-card">
+        <div class="budget-ring-wrap">
+          <svg class="gauge" viewBox="0 0 200 200" aria-hidden="true">
+            <circle class="gauge-track" cx="100" cy="100" r="80" stroke-dasharray="377 503"></circle>
+            <circle id="overview-gauge-fill" class="gauge-fill" cx="100" cy="100" r="80" stroke-dasharray="0 503"></circle>
+          </svg>
+          <div class="budget-ring-inner">
+            <div id="overview-remaining" class="budget-remaining">0</div>
+            <div class="budget-remaining-label">remaining</div>
+          </div>
+        </div>
+        <div class="budget-stats">
+          <div class="budget-stat"><span id="overview-income-total">0</span><label>Income</label></div>
+          <div class="budget-stat"><span id="overview-budgeted-total">0</span><label>Budgeted</label></div>
+          <div class="budget-stat"><span id="overview-spent-total">0</span><label>Spent (<span id="overview-sheet-name"></span>)</label></div>
+        </div>
+      </div>
+
+      <div class="section-title">Budget by category</div>
+      <div id="overview-categories" class="list"></div>
+    </section>
+
+    <section id="tab-income" class="tab-panel">
+      <h2 class="panel-title">Income</h2>
+      <p class="panel-lede">Add your salary or other regular income, plus every apartment you earn rent from. Properties are entered as a net yearly figure — after service charges — and split by however much of it you own.</p>
+
+      <div class="section-title">Other income</div>
+      <div id="income-sources-list" class="list"></div>
+      <button type="button" id="add-income-source-btn" class="secondary-btn full">+ Add income</button>
+
+      <div class="section-title">Properties</div>
+      <div id="properties-list" class="list"></div>
+      <button type="button" id="add-property-btn" class="secondary-btn full">+ Add apartment</button>
+    </section>
+
+    <section id="tab-budgets" class="tab-panel">
+      <div class="panel-head">
+        <h2 class="panel-title">Budgets</h2>
+        <span id="budgets-remaining-hint" class="panel-sub"></span>
+      </div>
+      <p class="panel-lede">Split your monthly income into categories. Each category's progress bar tracks what you've actually spent this sheet against what you budgeted for it.</p>
+      <div id="budgets-list" class="list"></div>
+      <button type="button" id="add-category-btn" class="secondary-btn full">+ Add category</button>
+    </section>
+
+    <section id="tab-expenses" class="tab-panel">
+      <h2 class="panel-title">Expenses</h2>
+
+      <div class="sheet-bar">
+        <select id="sheet-select" class="sheet-select"></select>
+        <button type="button" id="new-sheet-btn" class="icon-btn" title="New expense sheet">+</button>
+        <button type="button" id="delete-sheet-btn" class="icon-btn" title="Delete this sheet">🗑</button>
+      </div>
+
+      <div class="pie-wrap">
+        <svg viewBox="0 0 200 200" class="pie-svg"><g id="expenses-pie"></g></svg>
+        <div class="pie-center">
+          <div id="expenses-pie-total" class="pie-total">0</div>
+          <div class="pie-label">spent</div>
+        </div>
+      </div>
+      <div id="expenses-pie-empty" class="pie-empty hidden">Nothing logged in this sheet yet.</div>
+      <div id="expenses-legend" class="list"></div>
+
+      <div class="section-title">Filter by category</div>
+      <div id="expenses-filter" class="chip-row"></div>
+
+      <div id="expenses-list" class="list"></div>
+      <button type="button" id="add-expense-btn" class="primary-btn full">+ Add expense</button>
+    </section>
+
+    <section id="tab-share" class="tab-panel">
+      <h2 class="panel-title">Share</h2>
+
+      <div id="share-setup">
+        <p class="panel-lede">Get a link that shows your income, budgets, and expenses updating live — no account or app install needed on their end, and nothing they open can be edited. Good for sharing with your wife.</p>
+        <label class="field">Share server address
+          <input id="share-server" class="text-input" type="url" inputmode="url"
+                 autocapitalize="off" autocorrect="off" spellcheck="false"
+                 placeholder="https://....workers.dev" />
+          <p class="field-hint">The address printed by <code>npm run api:deploy</code> once you deploy the included server to your own free Cloudflare account. See <code>api/README.md</code>.</p>
+        </label>
+        <button type="button" id="share-enable-btn" class="primary-btn full">Turn on live sharing</button>
+        <div id="share-setup-status" class="entry-sub"></div>
+      </div>
+
+      <div id="share-board" class="hidden">
+        <label class="toggle-row">
+          <span>
+            <span class="toggle-row-title">Live sharing</span>
+            <span class="toggle-row-sub">While on, every change here pushes an updated snapshot to the link below.</span>
+          </span>
+          <span class="toggle-switch">
+            <input type="checkbox" id="share-enabled-toggle" />
+            <span class="toggle-track"></span>
+          </span>
+        </label>
+
+        <div class="share-link-card">
+          <div class="share-link-label">Viewer link — send this to your wife</div>
+          <div id="share-link-value" class="share-link-value"></div>
+          <button type="button" id="share-copy-btn" class="secondary-btn full">Copy link</button>
+          <div id="share-sync-state" class="share-sync-state"></div>
+        </div>
+
+        <button type="button" id="share-disable-btn" class="danger-btn full">Turn off sharing &amp; revoke link</button>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <button data-tab="overview"><span class="tab-icon">📊</span>Overview</button>
+    <button data-tab="income"><span class="tab-icon">💵</span>Income</button>
+    <button data-tab="budgets"><span class="tab-icon">🗂️</span>Budgets</button>
+    <button data-tab="expenses"><span class="tab-icon">🧾</span>Expenses</button>
+    <button data-tab="share"><span class="tab-icon">🔗</span>Share</button>
+  </nav>
+</div>
+
+<!-- Income source editor -->
+<div id="income-source-modal" class="modal hidden" data-close-modal="income-source-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="income-source-title">Add income</h3>
+      <button class="icon-btn" data-close-modal="income-source-modal">✕</button>
+    </div>
+    <form id="income-source-form">
+      <label class="field">Name<input name="name" type="text" placeholder="e.g. Salary" required /></label>
+      <div class="field-row">
+        <label class="field">Amount<input name="amount" type="number" step="any" min="0" required /></label>
+        <label class="field">Frequency
+          <select name="frequency">
+            <option value="monthly">Per month</option>
+            <option value="yearly">Per year</option>
+          </select>
+        </label>
+      </div>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="income-source-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Property (apartment) editor -->
+<div id="property-modal" class="modal hidden" data-close-modal="property-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="property-title">Add apartment</h3>
+      <button class="icon-btn" data-close-modal="property-modal">✕</button>
+    </div>
+    <form id="property-form">
+      <label class="field">Name<input name="name" type="text" placeholder="e.g. Marina Tower 1204" required /></label>
+      <label class="field">Net income per year (after service charges)
+        <input name="annualNetIncome" type="number" step="any" min="0" required />
+      </label>
+      <label class="field">Your ownership share
+        <input name="sharePct" type="number" step="any" min="0" max="100" value="100" />
+        <p class="field-hint">100% if you own the whole apartment, less if you own a share of it.</p>
+      </label>
+      <label class="checkbox-row">
+        <input name="vacant" type="checkbox" />
+        Vacant / not earning right now
+      </label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="property-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Budget category editor -->
+<div id="category-modal" class="modal hidden" data-close-modal="category-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="category-title">Add category</h3>
+      <button class="icon-btn" data-close-modal="category-modal">✕</button>
+    </div>
+    <form id="category-form">
+      <label class="field">Name<input name="name" type="text" placeholder="e.g. Groceries" required /></label>
+      <label class="field">Monthly budget<input name="monthlyBudget" type="number" step="any" min="0" required /></label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="category-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Expense sheet: new -->
+<div id="sheet-modal" class="modal hidden" data-close-modal="sheet-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3>New expense sheet</h3>
+      <button class="icon-btn" data-close-modal="sheet-modal">✕</button>
+    </div>
+    <form id="sheet-form">
+      <label class="field">Name<input name="name" type="text" placeholder="e.g. October 2026" required /></label>
+      <button type="submit" class="primary-btn full">Create</button>
+    </form>
+  </div>
+</div>
+
+<!-- Expense editor -->
+<div id="expense-modal" class="modal hidden" data-close-modal="expense-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="expense-title">Add expense</h3>
+      <button class="icon-btn" data-close-modal="expense-modal">✕</button>
+    </div>
+    <form id="expense-form">
+      <div class="field-row">
+        <label class="field">Amount<input name="amount" type="number" step="any" min="0" required /></label>
+        <label class="field">Date<input name="date" type="date" required /></label>
+      </div>
+      <label class="field">Category
+        <select name="categoryId" id="expense-category-select"></select>
+      </label>
+      <label class="field">Note (optional)<input name="note" type="text" maxlength="140" placeholder="What was this for?" /></label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="expense-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Settings & backup -->
+<div id="settings-modal" class="modal hidden" data-close-modal="settings-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3>Settings &amp; Backup</h3>
+      <button class="icon-btn" data-close-modal="settings-modal">✕</button>
+    </div>
+    <form id="settings-form">
+      <label class="field">Currency symbol
+        <input name="currency" type="text" maxlength="6" placeholder="e.g. AED, $, £" />
+      </label>
+      <label class="field">Appearance
+        <select name="theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="system">Match my phone</option>
+        </select>
+      </label>
+      <button type="submit" class="primary-btn full">Save</button>
+    </form>
+    <p class="modal-hint" style="margin-top:18px">Everything is stored only on this device (except what you choose to push to a share link). Export a backup before switching phones.</p>
+    <button id="export-btn" class="secondary-btn full">Export Backup</button>
+    <label class="secondary-btn full file-label">
+      Import Backup
+      <input id="import-input" type="file" accept="application/json" hidden />
+    </label>
+    <div id="build-stamp" class="build-stamp"></div>
+  </div>
+</div>
+
+<script src="db.js"></script>
+<script src="share.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

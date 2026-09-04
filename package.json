@@ -1,0 +1,19 @@
+{
+  "name": "budget-tracker",
+  "version": "1.0.0",
+  "description": "Personal income and budget tracker: rental/salary income, category budgets, expense sheets with a pie-chart breakdown, and a live read-only share link",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "api:setup": "bash scripts/api-setup.sh",
+    "api:deploy": "npx wrangler deploy --config api/wrangler.toml",
+    "api:dev": "npx wrangler dev --local --config api/wrangler.toml --port 8788",
+    "api:schema:local": "npx wrangler d1 execute budget-tracker-share --local --config api/wrangler.toml --file=api/schema.sql -y"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
