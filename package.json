@@ -8,12 +8,14 @@
     "api:setup": "bash scripts/api-setup.sh",
     "api:deploy": "npx wrangler deploy --config api/wrangler.toml",
     "api:dev": "npx wrangler dev --local --config api/wrangler.toml --port 8788",
-    "api:schema:local": "npx wrangler d1 execute budget-tracker-share --local --config api/wrangler.toml --file=api/schema.sql -y"
+    "api:schema:local": "npx wrangler d1 execute budget-tracker-share --local --config api/wrangler.toml --file=api/schema.sql -y",
+    "icons": "node scripts/make-icons.js"
   },
   "dependencies": {
     "express": "^4.19.2"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.0.0",
+    "playwright": "^1.48.0"
   }
 }
