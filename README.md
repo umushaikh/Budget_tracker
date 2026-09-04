@@ -44,7 +44,15 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
   month happened to be on screen when you added it (so back-filling a past
   month's spending just works). A pie chart and per-category legend show
   the current month's spending at a glance; chips filter the list down to
-  one category at a time.
+  one category at a time. **Import bank/card statement (CSV)** bulk-adds
+  expenses from an exported statement instead of typing each one in: pick
+  which column is the date/amount/description once (remembered next time
+  you import that bank's format), then categorize each merchant that
+  appears — optionally "remember" it so future imports with that merchant
+  auto-categorize themselves. Re-importing an overlapping statement period
+  is safe: anything matching an existing expense (same date, amount, and
+  description) is skipped rather than duplicated. The file is parsed
+  entirely in the browser and never leaves the device.
 - **Overview** — total monthly and yearly income, a budget-remaining gauge
   for the active sheet, and every category's spend-vs-budget in one place.
 - **Share** — turn on a live, read-only link. It needs a server, and there's

@@ -83,6 +83,8 @@ function seedStore() {
     cashAccounts: [],
     receivables: [],
     payables: [],
+    importRules: [], // [{ id, keyword, categoryId }] - "any description containing keyword" -> categoryId
+    csvImportMapping: null, // { headerSignature, dateCol, amountCol, descCol, negativeIsSpend } - remembered per statement format
     share: null, // { serverUrl, code, token, enabled }
     calendarMonths: true
   };
@@ -143,6 +145,8 @@ function loadDb() {
       if (!parsed.cashAccounts) parsed.cashAccounts = [];
       if (!parsed.receivables) parsed.receivables = [];
       if (!parsed.payables) parsed.payables = [];
+      if (!parsed.importRules) parsed.importRules = [];
+      if (parsed.csvImportMapping === undefined) parsed.csvImportMapping = null;
       if (parsed.share === undefined) parsed.share = null;
       migrateToCalendarMonths(parsed);
       migratePropertyIncomeFields(parsed);
@@ -413,6 +417,73 @@ const db = {
     saveDb(store);
   },
 
+  // ---- Statement import (CSV) ----
+  // Everything here runs against a file you chose in your own browser -
+  // nothing is uploaded or checked against anywhere but this device.
+
+  async getImportRules() {
+    return loadDb().importRules;
+  },
+
+  // One rule per keyword - re-adding an existing keyword updates its
+  // category instead of creating a second, conflicting rule for it.
+  async addImportRule({ keyword, categoryId }) {
+    const store = loadDb();
+    const clean = (keyword || '').trim().toLowerCase();
+    if (!clean) throw new Error('Keyword cannot be empty.');
+    let rule = store.importRules.find(r => r.keyword === clean);
+    if (rule) rule.categoryId = categoryId || null;
+    else {
+      rule = { id: uid(), keyword: clean, categoryId: categoryId || null };
+      store.importRules.push(rule);
+    }
+    saveDb(store);
+    return rule;
+  },
+
+  async deleteImportRule(id) {
+    const store = loadDb();
+    store.importRules = store.importRules.filter(r => r.id !== id);
+    saveDb(store);
+  },
+
+  async getCsvMapping() {
+    return loadDb().csvImportMapping;
+  },
+
+  async saveCsvMapping(mapping) {
+    const store = loadDb();
+    store.csvImportMapping = mapping;
+    saveDb(store);
+    return mapping;
+  },
+
+  // Bulk-adds statement rows as expenses, skipping any that exactly match
+  // an existing expense (same date, amount, and description) so importing
+  // an overlapping statement period twice doesn't double-count anything.
+  // Each row's month sheet is derived from its own date, same as adding an
+  // expense by hand.
+  async importExpenses(rows) {
+    const store = loadDb();
+    let imported = 0, skipped = 0;
+    rows.forEach(row => {
+      const note = (row.note || '').trim();
+      const amount = Number(row.amount) || 0;
+      const isDuplicate = store.expenses.some(e => e.date === row.date && e.amount === amount && e.note === note);
+      if (isDuplicate) { skipped++; return; }
+      const sheetId = monthKeyFromDate(row.date);
+      ensureSheet(store, sheetId);
+      store.expenses.push({ id: uid(), sheetId, categoryId: row.categoryId || null, amount, note, date: row.date });
+      imported++;
+    });
+    if (imported > 0) {
+      const last = rows[rows.length - 1];
+      if (last) store.activeSheetId = monthKeyFromDate(last.date);
+    }
+    saveDb(store);
+    return { imported, skipped };
+  },
+
   // ---- Budget categories ----
 
   async getCategories() {
@@ -564,7 +635,8 @@ const db = {
       investmentCategories: store.investmentCategories,
       cashAccounts: store.cashAccounts,
       receivables: store.receivables,
-      payables: store.payables
+      payables: store.payables,
+      importRules: store.importRules
     };
   },
 
@@ -572,7 +644,7 @@ const db = {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('That file is not a Budget Tracker backup.');
     }
-    const { incomeSources, properties, categories, expenses, investments, investmentCategories, cashAccounts, receivables, payables } = payload;
+    const { incomeSources, properties, categories, expenses, investments, investmentCategories, cashAccounts, receivables, payables, importRules } = payload;
     if (!Array.isArray(categories) || !Array.isArray(expenses)) {
       throw new Error('That file is missing budget data, so it is not a Budget Tracker backup.');
     }
@@ -593,6 +665,7 @@ const db = {
     store.cashAccounts = Array.isArray(cashAccounts) ? cashAccounts : [];
     store.receivables = Array.isArray(receivables) ? receivables : [];
     store.payables = Array.isArray(payables) ? payables : [];
+    store.importRules = Array.isArray(importRules) ? importRules : [];
     // Re-derive each month's sheet from the imported expenses' own dates,
     // the same as the one-time migration - correct however old the backup is.
     store.sheets = [];

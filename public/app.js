@@ -33,6 +33,11 @@ const state = {
 
 let sharePushTimer = null;
 
+// Transient state for the CSV import flow - a parsed file and the choices
+// made about it, alive only while that modal is open. Not part of `state`
+// since none of it is persisted or needed by any other screen.
+let csvImport = null;
+
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let reloading = false;
@@ -55,6 +60,70 @@ function escapeHtml(str) {
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ---- CSV statement import ----
+// A small hand-rolled parser rather than a library, consistent with the rest
+// of this app having zero dependencies. Handles quoted fields (commas and
+// newlines inside quotes, "" as an escaped quote) - the one part of CSV that
+// a naive text.split(',').split('\n') gets wrong on a real bank export.
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+// Bank statements vary between YYYY-MM-DD, DD/MM/YYYY and MM/DD/YYYY with
+// either / or - as the separator. When the day/month split is genuinely
+// ambiguous (both parts ≤ 12) this defaults to day-first, matching the
+// region this app was built for - a wrong guess here is exactly what the
+// preview step exists to catch before anything is actually imported.
+function parseCsvDate(raw) {
+  const s = (raw || '').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (m) {
+    let [, a, b, year] = m;
+    a = Number(a); b = Number(b);
+    const [day, month] = a > 12 ? [a, b] : [b > 12 ? b : a, b > 12 ? a : b];
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+// Strips currency symbols/commas/spaces; treats "(45.00)" (common on
+// statements) as -45.00.
+function parseCsvAmount(raw) {
+  const s = (raw || '').trim();
+  if (!s) return null;
+  const isParenNegative = /^\(.*\)$/.test(s);
+  const cleaned = s.replace(/[^0-9.-]/g, '');
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  if (Number.isNaN(n)) return null;
+  return isParenNegative ? -Math.abs(n) : n;
 }
 
 function formatMoney(amount) {
@@ -661,6 +730,140 @@ function openExpenseModal(expense) {
   openModal('expense-modal');
 }
 
+// ---- CSV statement import ----
+
+async function handleCsvFileSelected(file) {
+  const text = await file.text();
+  const rows = parseCsv(text).filter(r => r.some(cell => cell.trim() !== ''));
+  if (rows.length < 2) {
+    alert('Could not find any rows in that file. Make sure it\'s a CSV export with a header row.');
+    return;
+  }
+  csvImport = { rows };
+  await renderCsvMappingStep();
+  document.getElementById('csv-step-mapping').classList.remove('hidden');
+  document.getElementById('csv-step-preview').classList.add('hidden');
+  openModal('csv-import-modal');
+}
+
+async function renderCsvMappingStep() {
+  const headers = csvImport.rows[0];
+  const options = headers.map((h, i) => `<option value="${i}">${escapeHtml(h.trim() || `Column ${i + 1}`)}</option>`).join('');
+  ['csv-col-date', 'csv-col-amount', 'csv-col-desc'].forEach(id => {
+    document.getElementById(id).innerHTML = options;
+  });
+
+  const remembered = await db.getCsvMapping();
+  const signature = headers.join('|');
+  if (remembered && remembered.headerSignature === signature) {
+    document.getElementById('csv-col-date').value = remembered.dateCol;
+    document.getElementById('csv-col-amount').value = remembered.amountCol;
+    document.getElementById('csv-col-desc').value = remembered.descCol;
+    document.getElementById('csv-sign').value = remembered.negativeIsSpend ? 'negative' : 'positive';
+  } else {
+    document.getElementById('csv-col-date').value = 0;
+    document.getElementById('csv-col-amount').value = headers.length > 1 ? 1 : 0;
+    document.getElementById('csv-col-desc').value = headers.length > 2 ? 2 : Math.max(0, headers.length - 1);
+    document.getElementById('csv-sign').value = 'negative';
+  }
+}
+
+// Turns the mapped columns into candidate expenses: parses each data row,
+// drops rows with no usable date/amount, keeps only the sign that means
+// "spent" (the other sign is a payment or refund, not an expense), and
+// flags anything that already exists (same date+amount+description) so the
+// preview can show it won't be double-counted. Groups by description so the
+// next step asks about each merchant once, not once per transaction.
+async function buildCsvCandidates() {
+  const dateCol = Number(document.getElementById('csv-col-date').value);
+  const amountCol = Number(document.getElementById('csv-col-amount').value);
+  const descCol = Number(document.getElementById('csv-col-desc').value);
+  const negativeIsSpend = document.getElementById('csv-sign').value === 'negative';
+  const headers = csvImport.rows[0];
+
+  await db.saveCsvMapping({ headerSignature: headers.join('|'), dateCol, amountCol, descCol, negativeIsSpend });
+
+  const rules = await db.getImportRules();
+  const matchRule = desc => {
+    const lower = desc.toLowerCase();
+    const rule = rules.find(r => lower.includes(r.keyword));
+    return rule ? rule.categoryId : null;
+  };
+
+  const candidates = [];
+  csvImport.rows.slice(1).forEach(row => {
+    const date = parseCsvDate(row[dateCol]);
+    const rawAmount = parseCsvAmount(row[amountCol]);
+    const note = (row[descCol] || '').trim().slice(0, 140);
+    if (!date || rawAmount === null || !note) return;
+    const isSpend = negativeIsSpend ? rawAmount < 0 : rawAmount > 0;
+    if (!isSpend) return;
+    const amount = Math.abs(rawAmount);
+    const duplicate = state.expenses.some(e => e.date === date && e.amount === amount && e.note === note);
+    candidates.push({ date, amount, note, categoryId: matchRule(note), duplicate });
+  });
+
+  const merchants = new Map();
+  candidates.forEach(c => {
+    if (!merchants.has(c.note)) merchants.set(c.note, { note: c.note, count: 0, total: 0, categoryId: c.categoryId });
+    const m = merchants.get(c.note);
+    m.count++;
+    m.total += c.amount;
+  });
+
+  csvImport.candidates = candidates;
+  csvImport.merchants = [...merchants.values()];
+}
+
+function renderCsvPreviewStep() {
+  const toImport = csvImport.candidates.filter(c => !c.duplicate);
+  const duplicates = csvImport.candidates.length - toImport.length;
+
+  document.getElementById('csv-preview-summary').textContent = duplicates > 0
+    ? `${toImport.length} to import, ${duplicates} already logged (skipped).`
+    : `${toImport.length} to import.`;
+  document.getElementById('csv-preview-empty').classList.toggle('hidden', csvImport.candidates.length > 0);
+
+  const categoryOptions = `<option value="">Uncategorized</option>` +
+    state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+  document.getElementById('csv-merchant-list').innerHTML = csvImport.merchants.map((m, i) => `
+    <div class="item-card">
+      <div class="item-card-sub">${escapeHtml(m.note)} · ${m.count} transaction${m.count > 1 ? 's' : ''} · ${formatMoney(m.total)}</div>
+      <select class="csv-merchant-category" data-idx="${i}">${categoryOptions}</select>
+      <label class="checkbox-row"><input type="checkbox" class="csv-remember" data-idx="${i}" checked /> Remember this merchant</label>
+    </div>`).join('');
+  csvImport.merchants.forEach((m, i) => {
+    document.querySelector(`.csv-merchant-category[data-idx="${i}"]`).value = m.categoryId || '';
+  });
+
+  document.getElementById('csv-step-mapping').classList.add('hidden');
+  document.getElementById('csv-step-preview').classList.remove('hidden');
+}
+
+async function confirmCsvImport() {
+  const categoryByMerchant = new Map();
+  document.querySelectorAll('.csv-merchant-category').forEach(sel => {
+    const merchant = csvImport.merchants[Number(sel.dataset.idx)];
+    categoryByMerchant.set(merchant.note, sel.value || null);
+  });
+  for (const cb of document.querySelectorAll('.csv-remember')) {
+    const merchant = csvImport.merchants[Number(cb.dataset.idx)];
+    const categoryId = categoryByMerchant.get(merchant.note);
+    if (cb.checked && categoryId) await db.addImportRule({ keyword: merchant.note, categoryId });
+  }
+
+  const rows = csvImport.candidates
+    .filter(c => !c.duplicate)
+    .map(c => ({ ...c, categoryId: categoryByMerchant.get(c.note) }));
+
+  const result = await db.importExpenses(rows);
+  csvImport = null;
+  closeModal('csv-import-modal');
+  await refreshAll();
+  alert(`Imported ${result.imported} expense${result.imported === 1 ? '' : 's'}.${result.skipped ? ` ${result.skipped} already logged, skipped.` : ''}`);
+}
+
 // ---- Net worth modals ----
 
 // Real Estate is the only category that can link to an apartment; once
@@ -1009,6 +1212,26 @@ function wireEvents() {
       await refreshAll();
     }
   });
+
+  document.getElementById('csv-file-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      await handleCsvFileSelected(file);
+    } catch (err) {
+      alert(err.message || 'Could not read that file.');
+    }
+  });
+  document.getElementById('csv-mapping-next-btn').addEventListener('click', async () => {
+    await buildCsvCandidates();
+    renderCsvPreviewStep();
+  });
+  document.getElementById('csv-back-btn').addEventListener('click', () => {
+    document.getElementById('csv-step-preview').classList.add('hidden');
+    document.getElementById('csv-step-mapping').classList.remove('hidden');
+  });
+  document.getElementById('csv-import-confirm-btn').addEventListener('click', confirmCsvImport);
 
   // Share tab
   document.getElementById('share-enable-btn').addEventListener('click', async () => {

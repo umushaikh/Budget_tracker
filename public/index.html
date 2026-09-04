@@ -157,6 +157,10 @@
 
       <div id="expenses-list" class="list"></div>
       <button type="button" id="add-expense-btn" class="primary-btn full">+ Add expense</button>
+      <label class="secondary-btn full file-label">
+        Import bank/card statement (CSV)
+        <input id="csv-file-input" type="file" accept=".csv,text/csv" hidden />
+      </label>
     </section>
 
     <section id="tab-share" class="tab-panel">
@@ -386,6 +390,39 @@
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="expense-delete" class="danger-btn full hidden">Delete</button>
     </form>
+  </div>
+</div>
+
+<!-- Statement import (CSV) -->
+<div id="csv-import-modal" class="modal hidden" data-close-modal="csv-import-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3>Import statement</h3>
+      <button class="icon-btn" data-close-modal="csv-import-modal">✕</button>
+    </div>
+
+    <div id="csv-step-mapping">
+      <p class="modal-hint">This file is read entirely on your device — it's never uploaded anywhere. Match each column once and it's remembered next time you import this bank's format.</p>
+      <label class="field">Date column<select id="csv-col-date"></select></label>
+      <label class="field">Amount column<select id="csv-col-amount"></select></label>
+      <label class="field">Description column<select id="csv-col-desc"></select></label>
+      <label class="field">Spending shows as
+        <select id="csv-sign">
+          <option value="negative">Negative numbers (e.g. -45.00)</option>
+          <option value="positive">Positive numbers</option>
+        </select>
+      </label>
+      <button type="button" id="csv-mapping-next-btn" class="primary-btn full">Preview import</button>
+    </div>
+
+    <div id="csv-step-preview" class="hidden">
+      <p id="csv-preview-summary" class="modal-hint"></p>
+      <div id="csv-preview-empty" class="empty-hint hidden">Nothing matched that mapping — go back and check the column choices.</div>
+      <div class="section-title">Categorize merchants</div>
+      <div id="csv-merchant-list" class="list"></div>
+      <button type="button" id="csv-import-confirm-btn" class="primary-btn full">Import</button>
+      <button type="button" id="csv-back-btn" class="secondary-btn full">Back</button>
+    </div>
   </div>
 </div>
 
