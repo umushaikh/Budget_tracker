@@ -154,7 +154,7 @@ function renderOverview() {
   document.getElementById('overview-income-total').textContent = formatMoney(monthlyIncome);
   document.getElementById('overview-budgeted-total').textContent = formatMoney(budgeted);
   document.getElementById('overview-spent-total').textContent = formatMoney(spent);
-  document.getElementById('overview-sheet-name').textContent = sheet ? sheet.name : '';
+  document.getElementById('overview-month-label').textContent = sheet ? sheet.name : '';
   document.getElementById('overview-remaining').textContent = formatMoney(remaining);
   document.getElementById('overview-remaining').classList.toggle('negative', remaining < 0);
 
@@ -606,17 +606,19 @@ function wireEvents() {
     }
   });
 
+  // Month navigation - shared by Overview and Expenses, since both read the
+  // same active sheet. Either pair of arrows moves both tabs together.
+  const shiftMonth = async delta => {
+    await db.shiftActiveSheet(delta);
+    state.expenseFilter = 'all';
+    await refreshAll();
+  };
+  document.getElementById('overview-month-prev-btn').addEventListener('click', () => shiftMonth(-1));
+  document.getElementById('overview-month-next-btn').addEventListener('click', () => shiftMonth(1));
+  document.getElementById('month-prev-btn').addEventListener('click', () => shiftMonth(-1));
+  document.getElementById('month-next-btn').addEventListener('click', () => shiftMonth(1));
+
   // Expenses tab
-  document.getElementById('month-prev-btn').addEventListener('click', async () => {
-    await db.shiftActiveSheet(-1);
-    state.expenseFilter = 'all';
-    await refreshAll();
-  });
-  document.getElementById('month-next-btn').addEventListener('click', async () => {
-    await db.shiftActiveSheet(1);
-    state.expenseFilter = 'all';
-    await refreshAll();
-  });
   document.getElementById('expenses-filter').addEventListener('click', e => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
