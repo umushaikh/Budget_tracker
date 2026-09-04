@@ -14,11 +14,12 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
 ## Features
 
 - **Income** — add salary or any other regular income (monthly or yearly),
-  plus every apartment you earn rent from. Properties are entered as a net
-  **yearly** figure, after service charges, and split by however much of the
-  apartment you own (100% by default, less if you own a share). A **vacant**
-  toggle zeroes a property's contribution to your income while keeping it
-  listed, for the ones not currently earning.
+  plus every apartment you earn rent from. Properties are entered as gross
+  rent per year and service charges per year — the app subtracts them for
+  you, live, and shows the net figure as you type — then split by however
+  much of the apartment you own (100% by default, less if you own a share).
+  A **vacant** toggle zeroes a property's contribution to your income while
+  keeping it listed, for the ones not currently earning.
 - **Budgets** — split your monthly income into categories (Groceries,
   Rent, Utilities, ... or your own), each with its own monthly budget.
   A progress bar on every category tracks what you've actually spent

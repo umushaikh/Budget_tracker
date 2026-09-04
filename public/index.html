@@ -59,7 +59,7 @@
 
     <section id="tab-income" class="tab-panel">
       <h2 class="panel-title">Income</h2>
-      <p class="panel-lede">Add your salary or other regular income, plus every apartment you earn rent from. Properties are entered as a net yearly figure — after service charges — and split by however much of it you own.</p>
+      <p class="panel-lede">Add your salary or other regular income, plus every apartment you earn rent from. Enter each property's gross rent and service charges per year — the net income is worked out for you — then split by however much of it you own.</p>
 
       <div class="section-title">Other income</div>
       <div id="income-sources-list" class="list"></div>
@@ -188,9 +188,11 @@
     </div>
     <form id="property-form">
       <label class="field">Name<input name="name" type="text" placeholder="e.g. Marina Tower 1204" required /></label>
-      <label class="field">Net income per year (after service charges)
-        <input name="annualNetIncome" type="number" step="any" min="0" required />
-      </label>
+      <div class="field-row">
+        <label class="field">Rent income per year (gross)<input name="annualGrossIncome" type="number" step="any" min="0" required /></label>
+        <label class="field">Service charges per year<input name="annualServiceCharges" type="number" step="any" min="0" value="0" /></label>
+      </div>
+      <div class="net-preview">Net income: <strong id="property-net-preview">AED 0 / year</strong></div>
       <label class="field">Your ownership share
         <input name="sharePct" type="number" step="any" min="0" max="100" value="100" />
         <p class="field-hint">100% if you own the whole apartment, less if you own a share of it.</p>

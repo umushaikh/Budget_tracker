@@ -96,6 +96,22 @@ function migrateToCalendarMonths(store) {
   store.calendarMonths = true;
 }
 
+// One-time migration from a single "net income" figure to separate gross
+// rent and service charges, so the app can do that subtraction instead of
+// asking you to do it yourself before typing it in. A property saved under
+// the old shape has no annualGrossIncome yet; its old net figure becomes the
+// gross figure with zero service charges, which keeps its computed net
+// income identical until you go back in and split the two apart for real.
+function migratePropertyIncomeFields(store) {
+  store.properties.forEach(p => {
+    if (p.annualGrossIncome === undefined) {
+      p.annualGrossIncome = p.annualNetIncome || 0;
+      p.annualServiceCharges = 0;
+      delete p.annualNetIncome;
+    }
+  });
+}
+
 function loadDb() {
   const raw = localStorage.getItem(DB_KEY);
   if (raw) {
@@ -109,6 +125,7 @@ function loadDb() {
       if (!parsed.expenses) parsed.expenses = [];
       if (parsed.share === undefined) parsed.share = null;
       migrateToCalendarMonths(parsed);
+      migratePropertyIncomeFields(parsed);
       return parsed;
     } catch {
       // fall through and reseed a fresh db below
@@ -176,12 +193,13 @@ const db = {
     return loadDb().properties;
   },
 
-  async addProperty({ name, annualNetIncome, sharePct, vacant }) {
+  async addProperty({ name, annualGrossIncome, annualServiceCharges, sharePct, vacant }) {
     const store = loadDb();
     const property = {
       id: uid(),
       name: (name || '').trim() || 'Apartment',
-      annualNetIncome: Number(annualNetIncome) || 0,
+      annualGrossIncome: Number(annualGrossIncome) || 0,
+      annualServiceCharges: Number(annualServiceCharges) || 0,
       sharePct: Math.max(0, Math.min(100, Number(sharePct) || 100)),
       vacant: !!vacant
     };
@@ -190,12 +208,13 @@ const db = {
     return property;
   },
 
-  async updateProperty(id, { name, annualNetIncome, sharePct, vacant }) {
+  async updateProperty(id, { name, annualGrossIncome, annualServiceCharges, sharePct, vacant }) {
     const store = loadDb();
     const property = store.properties.find(p => p.id === id);
     if (!property) return null;
     property.name = (name || '').trim() || 'Apartment';
-    property.annualNetIncome = Number(annualNetIncome) || 0;
+    property.annualGrossIncome = Number(annualGrossIncome) || 0;
+    property.annualServiceCharges = Number(annualServiceCharges) || 0;
     property.sharePct = Math.max(0, Math.min(100, Number(sharePct) || 100));
     property.vacant = !!vacant;
     saveDb(store);

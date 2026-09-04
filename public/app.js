@@ -74,9 +74,13 @@ function sourceMonthly(source) {
   return source.frequency === 'yearly' ? source.amount / 12 : source.amount;
 }
 
+function propertyNetAnnual(property) {
+  return (property.annualGrossIncome || 0) - (property.annualServiceCharges || 0);
+}
+
 function propertyMonthly(property) {
   if (property.vacant) return 0;
-  return (property.annualNetIncome * (property.sharePct / 100)) / 12;
+  return (propertyNetAnnual(property) * (property.sharePct / 100)) / 12;
 }
 
 function totalMonthlyIncome() {
@@ -205,7 +209,7 @@ function renderIncome() {
         <div class="item-card-head">
           <button type="button" class="entry-info edit-property-btn" data-id="${p.id}">
             <h3>${escapeHtml(p.name)}${p.vacant ? '<span class="tag vacant">Vacant</span>' : ''}${p.sharePct < 100 ? `<span class="tag share">${p.sharePct}% share</span>` : ''}</h3>
-            <div class="item-card-sub">${formatMoney(p.annualNetIncome)} / year net, after service charges</div>
+            <div class="item-card-sub">${formatMoney(p.annualGrossIncome)} gross &minus; ${formatMoney(p.annualServiceCharges)} service charges = ${formatMoney(propertyNetAnnual(p))} net / year</div>
           </button>
         </div>
         <div class="item-card-value${p.vacant ? ' muted' : ''}">${formatMoney(propertyMonthly(p))} <span class="item-card-sub" style="display:inline">/ month${p.vacant ? ' (vacant)' : ''}</span></div>
@@ -454,14 +458,22 @@ function openPropertyModal(property) {
   form.reset();
   if (property) {
     form.name.value = property.name;
-    form.annualNetIncome.value = property.annualNetIncome;
+    form.annualGrossIncome.value = property.annualGrossIncome;
+    form.annualServiceCharges.value = property.annualServiceCharges;
     form.sharePct.value = property.sharePct;
     form.vacant.checked = property.vacant;
   } else {
     form.sharePct.value = 100;
   }
   document.getElementById('property-delete').classList.toggle('hidden', !property);
+  updatePropertyNetPreview();
   openModal('property-modal');
+}
+
+function updatePropertyNetPreview() {
+  const form = document.getElementById('property-form');
+  const net = (Number(form.annualGrossIncome.value) || 0) - (Number(form.annualServiceCharges.value) || 0);
+  document.getElementById('property-net-preview').textContent = `${formatMoney(net)} / year net`;
 }
 
 function openCategoryModal(category) {
@@ -545,12 +557,16 @@ function wireEvents() {
     const btn = e.target.closest('.edit-property-btn');
     if (btn) openPropertyModal(state.properties.find(p => p.id === btn.dataset.id));
   });
+  document.getElementById('property-form').addEventListener('input', e => {
+    if (e.target.name === 'annualGrossIncome' || e.target.name === 'annualServiceCharges') updatePropertyNetPreview();
+  });
   document.getElementById('property-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
     const payload = {
       name: f.get('name'),
-      annualNetIncome: f.get('annualNetIncome'),
+      annualGrossIncome: f.get('annualGrossIncome'),
+      annualServiceCharges: f.get('annualServiceCharges'),
       sharePct: f.get('sharePct'),
       vacant: f.get('vacant') === 'on'
     };
