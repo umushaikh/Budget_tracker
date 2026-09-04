@@ -35,9 +35,10 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
 - **Overview** — total monthly and yearly income, a budget-remaining gauge
   for the active sheet, and every category's spend-vs-budget in one place.
 - **Net Worth** — everything you own against everything you owe: investments
-  by category (Real Estate, Stocks & Funds, Business, Gold, Vehicles,
-  Crypto, or your own "Other"), cash & bank accounts, money owed to you,
-  and money you owe, with a pie chart of asset composition. A Real Estate
+  by category (Real Estate, Stocks & Funds, Business, Gold, Vehicles, Crypto,
+  Other, or add your own from the investment editor's + button), cash & bank
+  accounts, money owed to you, and money you owe, with a pie chart of asset
+  composition. A Real Estate
   investment can link to an apartment already tracked in Income — its name
   then always follows that apartment's own name, and each property in
   Income shows its linked net-worth value (or a one-tap prompt to add one)

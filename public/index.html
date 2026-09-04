@@ -263,7 +263,10 @@
     </div>
     <form id="investment-form">
       <label class="field">Category
-        <select name="category" id="investment-category-select"></select>
+        <div class="select-with-btn">
+          <select name="category" id="investment-category-select"></select>
+          <button type="button" id="add-investment-category-btn" class="icon-btn" title="Add a new category">+</button>
+        </div>
       </label>
       <div id="investment-link-row" class="field hidden">Link to an apartment
         <select name="propertyId" id="investment-property-select"></select>
@@ -274,6 +277,20 @@
       <label class="field">Current value<input name="value" type="number" step="any" min="0" required /></label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="investment-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- New investment category -->
+<div id="investment-category-modal" class="modal hidden" data-close-modal="investment-category-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3>Add category</h3>
+      <button class="icon-btn" data-close-modal="investment-category-modal">✕</button>
+    </div>
+    <form id="investment-category-form">
+      <label class="field">Name<input name="name" type="text" placeholder="e.g. Bonds, Collectibles" required /></label>
+      <button type="submit" class="primary-btn full">Add</button>
     </form>
   </div>
 </div>

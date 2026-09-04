@@ -9,7 +9,11 @@ const DEFAULT_CATEGORIES = [
   'Entertainment', 'Health', 'Savings', 'Other'
 ];
 
-const INVESTMENT_CATEGORIES = [
+// Seeds store.investmentCategories, which is user-extensible from there (see
+// db.addInvestmentCategory) - this is only the starting point. "Real Estate"
+// is treated specially by the app (it's the one category that can link to an
+// apartment from Income), so it's always present and never removable.
+const DEFAULT_INVESTMENT_CATEGORIES = [
   'Real Estate', 'Stocks & Funds', 'Business', 'Gold & Precious Metals',
   'Vehicles', 'Crypto', 'Other'
 ];
@@ -75,6 +79,7 @@ function seedStore() {
     activeSheetId: key,
     expenses: [],
     investments: [],
+    investmentCategories: [...DEFAULT_INVESTMENT_CATEGORIES],
     cashAccounts: [],
     receivables: [],
     payables: [],
@@ -133,6 +138,8 @@ function loadDb() {
       if (!parsed.sheets) parsed.sheets = [];
       if (!parsed.expenses) parsed.expenses = [];
       if (!parsed.investments) parsed.investments = [];
+      if (!parsed.investmentCategories) parsed.investmentCategories = [...DEFAULT_INVESTMENT_CATEGORIES];
+      if (!parsed.investmentCategories.includes('Real Estate')) parsed.investmentCategories.unshift('Real Estate');
       if (!parsed.cashAccounts) parsed.cashAccounts = [];
       if (!parsed.receivables) parsed.receivables = [];
       if (!parsed.payables) parsed.payables = [];
@@ -262,12 +269,32 @@ const db = {
     return loadDb().investments;
   },
 
+  async getInvestmentCategories() {
+    return loadDb().investmentCategories;
+  },
+
+  // Adds a category if it's new (case-insensitively - "gold" and "Gold"
+  // are the same category), or just returns the existing one it matches.
+  // No rename/delete here on purpose: investments reference a category by
+  // name, and "Real Estate" is load-bearing for the apartment link, so
+  // free-form renaming is left for later rather than risking either.
+  async addInvestmentCategory(name) {
+    const store = loadDb();
+    const clean = (name || '').trim();
+    if (!clean) throw new Error('Category name cannot be empty.');
+    const existing = store.investmentCategories.find(c => c.toLowerCase() === clean.toLowerCase());
+    if (existing) return existing;
+    store.investmentCategories.push(clean);
+    saveDb(store);
+    return clean;
+  },
+
   async addInvestment({ name, category, value, propertyId }) {
     const store = loadDb();
     const investment = {
       id: uid(),
       name: (name || '').trim() || 'Investment',
-      category: INVESTMENT_CATEGORIES.includes(category) ? category : 'Other',
+      category: store.investmentCategories.includes(category) ? category : 'Other',
       value: Number(value) || 0,
       propertyId: propertyId || null
     };
@@ -281,7 +308,7 @@ const db = {
     const investment = store.investments.find(i => i.id === id);
     if (!investment) return null;
     investment.name = (name || '').trim() || 'Investment';
-    investment.category = INVESTMENT_CATEGORIES.includes(category) ? category : 'Other';
+    investment.category = store.investmentCategories.includes(category) ? category : 'Other';
     investment.value = Number(value) || 0;
     investment.propertyId = propertyId || null;
     saveDb(store);
@@ -534,6 +561,7 @@ const db = {
       activeSheetId: store.activeSheetId,
       expenses: store.expenses,
       investments: store.investments,
+      investmentCategories: store.investmentCategories,
       cashAccounts: store.cashAccounts,
       receivables: store.receivables,
       payables: store.payables
@@ -544,7 +572,7 @@ const db = {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('That file is not a Budget Tracker backup.');
     }
-    const { incomeSources, properties, categories, expenses, investments, cashAccounts, receivables, payables } = payload;
+    const { incomeSources, properties, categories, expenses, investments, investmentCategories, cashAccounts, receivables, payables } = payload;
     if (!Array.isArray(categories) || !Array.isArray(expenses)) {
       throw new Error('That file is missing budget data, so it is not a Budget Tracker backup.');
     }
@@ -554,6 +582,14 @@ const db = {
     store.categories = categories;
     store.expenses = expenses;
     store.investments = Array.isArray(investments) ? investments : [];
+    // A backup from before custom categories existed has no
+    // investmentCategories of its own - fall back to whatever categories its
+    // investments actually use (plus the defaults), so nothing imports into
+    // a category the picker doesn't know about.
+    store.investmentCategories = Array.isArray(investmentCategories) && investmentCategories.length
+      ? investmentCategories
+      : [...new Set([...DEFAULT_INVESTMENT_CATEGORIES, ...store.investments.map(i => i.category).filter(Boolean)])];
+    if (!store.investmentCategories.includes('Real Estate')) store.investmentCategories.unshift('Real Estate');
     store.cashAccounts = Array.isArray(cashAccounts) ? cashAccounts : [];
     store.receivables = Array.isArray(receivables) ? receivables : [];
     store.payables = Array.isArray(payables) ? payables : [];

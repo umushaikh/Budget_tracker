@@ -14,6 +14,7 @@ const state = {
   activeSheetId: null,
   expenses: [],
   investments: [],
+  investmentCategories: [],
   cashAccounts: [],
   receivables: [],
   payables: [],
@@ -121,7 +122,7 @@ function investmentDisplayName(investment) {
 }
 
 function investmentCategoryColor(category) {
-  const idx = INVESTMENT_CATEGORIES.indexOf(category);
+  const idx = state.investmentCategories.indexOf(category);
   return CATEGORY_PALETTE[(idx < 0 ? 0 : idx) % CATEGORY_PALETTE.length];
 }
 
@@ -290,7 +291,7 @@ function renderNetWorth() {
   document.getElementById('networth-liabilities-total').textContent = formatMoney(payablesTotal());
 
   const segments = [
-    ...INVESTMENT_CATEGORIES.map(cat => ({
+    ...state.investmentCategories.map(cat => ({
       label: cat,
       value: state.investments.filter(i => i.category === cat).reduce((s, i) => s + (i.value || 0), 0),
       color: investmentCategoryColor(cat)
@@ -494,7 +495,7 @@ function render() {
     state.categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 
   document.getElementById('investment-category-select').innerHTML =
-    INVESTMENT_CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    state.investmentCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
   document.getElementById('investment-property-select').innerHTML = `<option value="">Not linked</option>` +
     state.properties.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
 
@@ -744,6 +745,7 @@ async function refreshAll() {
   state.activeSheetId = all.activeSheetId;
   state.expenses = all.expenses;
   state.investments = all.investments;
+  state.investmentCategories = all.investmentCategories;
   state.cashAccounts = all.cashAccounts;
   state.receivables = all.receivables;
   state.payables = all.payables;
@@ -842,6 +844,22 @@ function wireEvents() {
       closeModal('investment-modal');
       await refreshAll();
     }
+  });
+  document.getElementById('add-investment-category-btn').addEventListener('click', () => {
+    document.getElementById('investment-category-form').reset();
+    openModal('investment-category-modal');
+  });
+  document.getElementById('investment-category-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const category = await db.addInvestmentCategory(f.get('name'));
+    await refreshAll();
+    // The investment editor is still open underneath - select the category
+    // that was just added rather than leaving whatever was picked before.
+    const categorySelect = document.getElementById('investment-form').category;
+    categorySelect.value = category;
+    updateInvestmentFormVisibility();
+    closeModal('investment-category-modal');
   });
 
   document.getElementById('add-cash-account-btn').addEventListener('click', () => openCashAccountModal(null));
