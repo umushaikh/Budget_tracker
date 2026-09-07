@@ -200,8 +200,23 @@ function linkedInvestmentFor(propertyId) {
   return state.investments.find(i => i.propertyId === propertyId);
 }
 
+// A linked investment's share always follows its apartment's own share in
+// Income - not a separately-entered copy - the same pattern as its name, so
+// changing your ownership share in one place can't leave the other stale.
+function investmentSharePct(investment) {
+  const linked = investment.propertyId && state.properties.find(p => p.id === investment.propertyId);
+  return linked ? linked.sharePct : (investment.sharePct ?? 100);
+}
+
+// `value` is always the investment's full value; this is what's actually
+// yours, once its ownership share is applied - the figure used everywhere
+// in net worth totals and charts.
+function investmentNetValue(investment) {
+  return (investment.value || 0) * (investmentSharePct(investment) / 100);
+}
+
 function investmentsTotal() {
-  return state.investments.reduce((s, i) => s + (i.value || 0), 0);
+  return state.investments.reduce((s, i) => s + investmentNetValue(i), 0);
 }
 
 function cashTotal() {
@@ -354,7 +369,7 @@ function renderIncome() {
 function propertyNetWorthRow(property) {
   const linked = linkedInvestmentFor(property.id);
   return linked
-    ? `<button type="button" class="linked-networth-row edit-linked-investment-btn" data-id="${linked.id}">🏦 Net worth value: <strong>${formatMoney(linked.value)}</strong> ›</button>`
+    ? `<button type="button" class="linked-networth-row edit-linked-investment-btn" data-id="${linked.id}">🏦 Net worth value: <strong>${formatMoney(investmentNetValue(linked))}</strong> ›</button>`
     : `<button type="button" class="linked-networth-row add-linked-investment-btn" data-property-id="${property.id}">+ Add this apartment's value to Net Worth ›</button>`;
 }
 
@@ -370,7 +385,7 @@ function renderNetWorth() {
   const segments = [
     ...state.investmentCategories.map(cat => ({
       label: cat,
-      value: state.investments.filter(i => i.category === cat).reduce((s, i) => s + (i.value || 0), 0),
+      value: state.investments.filter(i => i.category === cat).reduce((s, i) => s + investmentNetValue(i), 0),
       color: investmentCategoryColor(cat)
     })),
     { label: 'Cash & Bank', value: cashTotal(), color: 'var(--accent)' },
@@ -384,16 +399,22 @@ function renderNetWorth() {
 
   const investmentsList = document.getElementById('investments-list');
   investmentsList.innerHTML = state.investments.length
-    ? state.investments.map(i => `
+    ? state.investments.map(i => {
+      const sharePct = investmentSharePct(i);
+      const sub = sharePct < 100
+        ? `${escapeHtml(i.category)} · ${formatMoney(i.value)} × ${sharePct}% share`
+        : escapeHtml(i.category);
+      return `
       <div class="item-card" data-investment-id="${i.id}">
         <div class="item-card-head">
           <button type="button" class="entry-info edit-investment-btn" data-id="${i.id}">
             <h3>${escapeHtml(investmentDisplayName(i))}${i.propertyId ? '<span class="tag share">🔗 linked</span>' : ''}</h3>
-            <div class="item-card-sub">${escapeHtml(i.category)}</div>
+            <div class="item-card-sub">${sub}</div>
           </button>
         </div>
-        <div class="item-card-value">${formatMoney(i.value)}</div>
-      </div>`).join('')
+        <div class="item-card-value">${formatMoney(investmentNetValue(i))}</div>
+      </div>`;
+    }).join('')
     : `<div class="empty-hint">No investments added yet.</div>`;
 
   const cashList = document.getElementById('cash-accounts-list');
@@ -867,8 +888,9 @@ async function confirmCsvImport() {
 // ---- Net worth modals ----
 
 // Real Estate is the only category that can link to an apartment; once
-// linked, the Name field is replaced with a note, since the name then
-// always follows the apartment's own name instead of being typed here.
+// linked, the Name and ownership-share fields are replaced with a note,
+// since both then always follow the apartment's own name and share instead
+// of being entered here.
 function updateInvestmentFormVisibility() {
   const form = document.getElementById('investment-form');
   const isRealEstate = form.category.value === 'Real Estate';
@@ -877,10 +899,13 @@ function updateInvestmentFormVisibility() {
 
   const linkedPropertyId = isRealEstate ? form.propertyId.value : '';
   document.getElementById('investment-name-row').classList.toggle('hidden', !!linkedPropertyId);
+  document.getElementById('investment-share-row').classList.toggle('hidden', !!linkedPropertyId);
   const noteEl = document.getElementById('investment-linked-note');
   if (linkedPropertyId) {
     const property = state.properties.find(p => p.id === linkedPropertyId);
-    noteEl.textContent = `Name follows "${property ? property.name : 'this apartment'}" from Income.`;
+    const label = property ? property.name : 'this apartment';
+    const share = property ? property.sharePct : 100;
+    noteEl.textContent = `Name and ${share}% ownership share follow "${label}" from Income.`;
     noteEl.classList.remove('hidden');
   } else {
     noteEl.classList.add('hidden');
@@ -897,6 +922,7 @@ function openInvestmentModal(investment, prefillPropertyId) {
     form.propertyId.value = investment.propertyId || '';
     form.name.value = investmentDisplayName(investment);
     form.value.value = investment.value;
+    form.sharePct.value = investment.sharePct ?? 100;
   } else if (prefillPropertyId) {
     form.category.value = 'Real Estate';
     form.propertyId.value = prefillPropertyId;
@@ -1053,7 +1079,7 @@ function wireEvents() {
   document.getElementById('investment-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const payload = { name: f.get('name'), category: f.get('category'), value: f.get('value'), propertyId: f.get('propertyId') || null };
+    const payload = { name: f.get('name'), category: f.get('category'), value: f.get('value'), propertyId: f.get('propertyId') || null, sharePct: f.get('sharePct') };
     if (state.editingInvestment) await db.updateInvestment(state.editingInvestment, payload);
     else await db.addInvestment(payload);
     closeModal('investment-modal');

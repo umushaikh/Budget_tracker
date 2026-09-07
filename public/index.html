@@ -280,11 +280,15 @@
       </label>
       <div id="investment-link-row" class="field hidden">Link to an apartment
         <select name="propertyId" id="investment-property-select"></select>
-        <p class="field-hint">Keeps this investment's name in sync with that apartment in Income. Leave as "Not linked" for real estate you're not tracking as rental income there.</p>
+        <p class="field-hint">Keeps this investment's name and ownership share in sync with that apartment in Income. Leave as "Not linked" for real estate you're not tracking as rental income there.</p>
       </div>
       <label class="field" id="investment-name-row">Name<input name="name" type="text" placeholder="e.g. Apple stock, Gold bars" /></label>
       <p id="investment-linked-note" class="field-hint hidden"></p>
-      <label class="field">Current value<input name="value" type="number" step="any" min="0" required /></label>
+      <label class="field">Current value (full value, before your share)<input name="value" type="number" step="any" min="0" required /></label>
+      <label class="field" id="investment-share-row">Your ownership share
+        <input name="sharePct" type="number" step="any" min="0" max="100" value="100" />
+        <p class="field-hint">100% if you own all of it, less if you own a share.</p>
+      </label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="investment-delete" class="danger-btn full hidden">Delete</button>
     </form>

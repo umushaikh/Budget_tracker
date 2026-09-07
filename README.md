@@ -26,13 +26,16 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
     investments by category (Real Estate, Stocks & Funds, Business, Gold,
     Vehicles, Crypto, Other, or add your own from the investment editor's +
     button), cash & bank accounts, money owed to you, and money you owe,
-    with a pie chart of asset composition. A Real Estate investment can
-    link to an apartment already tracked in Income — its name then always
-    follows that apartment's own name, and each property in Income shows
-    its linked net-worth value (or a one-tap prompt to add one) right on
-    its card, so the two stay in sync from either side. Unlinking never
-    loses data: deleting an apartment freezes its investment's name instead
-    of deleting the investment too.
+    with a pie chart of asset composition. Every investment has an
+    ownership share, same as a property in Income: enter its full value
+    and how much of it is actually yours (100% by default), and net worth
+    counts only your share. A Real Estate investment can link to an
+    apartment already tracked in Income — its name and ownership share
+    then always follow that apartment's own name and share, and each
+    property in Income shows its linked net-worth value (or a one-tap
+    prompt to add one) right on its card, so the two stay in sync from
+    either side. Unlinking never loses data: deleting an apartment freezes
+    its investment's name instead of deleting the investment too.
 - **Budgets** — split your monthly income into categories (Groceries,
   Rent, Utilities, ... or your own), each with its own monthly budget.
   A progress bar on every category tracks what you've actually spent

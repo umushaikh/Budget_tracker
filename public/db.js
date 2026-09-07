@@ -128,6 +128,16 @@ function migratePropertyIncomeFields(store) {
   });
 }
 
+// An investment saved before ownership share existed has no sharePct yet.
+// Its stored value was always meant as the full value (there was nothing
+// else it could have meant), so defaulting to 100% leaves its computed net
+// value exactly as it was.
+function migrateInvestmentSharePct(store) {
+  store.investments.forEach(i => {
+    if (i.sharePct === undefined) i.sharePct = 100;
+  });
+}
+
 function loadDb() {
   const raw = localStorage.getItem(DB_KEY);
   if (raw) {
@@ -150,6 +160,7 @@ function loadDb() {
       if (parsed.share === undefined) parsed.share = null;
       migrateToCalendarMonths(parsed);
       migratePropertyIncomeFields(parsed);
+      migrateInvestmentSharePct(parsed);
       return parsed;
     } catch {
       // fall through and reseed a fresh db below
@@ -293,21 +304,27 @@ const db = {
     return clean;
   },
 
-  async addInvestment({ name, category, value, propertyId }) {
+  // `value` is always the investment's full value; `sharePct` is how much of
+  // it is actually yours (100 by default). For one linked to an apartment,
+  // sharePct is ignored here and always read live from that apartment's own
+  // share in Income instead (see investmentSharePct in app.js) - the same
+  // pattern as its name, so the two can never drift apart.
+  async addInvestment({ name, category, value, propertyId, sharePct }) {
     const store = loadDb();
     const investment = {
       id: uid(),
       name: (name || '').trim() || 'Investment',
       category: store.investmentCategories.includes(category) ? category : 'Other',
       value: Number(value) || 0,
-      propertyId: propertyId || null
+      propertyId: propertyId || null,
+      sharePct: Math.max(0, Math.min(100, Number(sharePct) || 100))
     };
     store.investments.push(investment);
     saveDb(store);
     return investment;
   },
 
-  async updateInvestment(id, { name, category, value, propertyId }) {
+  async updateInvestment(id, { name, category, value, propertyId, sharePct }) {
     const store = loadDb();
     const investment = store.investments.find(i => i.id === id);
     if (!investment) return null;
@@ -315,6 +332,7 @@ const db = {
     investment.category = store.investmentCategories.includes(category) ? category : 'Other';
     investment.value = Number(value) || 0;
     investment.propertyId = propertyId || null;
+    investment.sharePct = Math.max(0, Math.min(100, Number(sharePct) || 100));
     saveDb(store);
     return investment;
   },
