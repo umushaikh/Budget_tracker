@@ -150,6 +150,17 @@ function migrateInvestmentSharePct(store) {
   });
 }
 
+// Expenses saved before `reward` (cashback/points earned on the purchase)
+// and `source` (manual/csv/pdf, so a bad statement import can be found and
+// bulk-removed later) existed get the defaults those fields would have had
+// all along - no cashback, entered by hand.
+function migrateExpenseFields(store) {
+  store.expenses.forEach(e => {
+    if (e.reward === undefined) e.reward = 0;
+    if (e.source === undefined) e.source = 'manual';
+  });
+}
+
 function loadDb() {
   const raw = localStorage.getItem(DB_KEY);
   if (raw) {
@@ -174,6 +185,7 @@ function loadDb() {
       migrateToCalendarMonths(parsed);
       migratePropertyIncomeFields(parsed);
       migrateInvestmentSharePct(parsed);
+      migrateExpenseFields(parsed);
       return parsed;
     } catch {
       // fall through and reseed a fresh db below
@@ -548,8 +560,9 @@ const db = {
   // an existing expense (same date, amount, and description) so importing
   // an overlapping statement period twice doesn't double-count anything.
   // Each row's month sheet is derived from its own date, same as adding an
-  // expense by hand.
-  async importExpenses(rows) {
+  // expense by hand. Tagged with where it came from (`source`), so a bad
+  // import can be found and removed in bulk with deleteExpensesBySource.
+  async importExpenses(rows, source) {
     const store = loadDb();
     let imported = 0, skipped = 0;
     rows.forEach(row => {
@@ -559,7 +572,16 @@ const db = {
       if (isDuplicate) { skipped++; return; }
       const sheetId = monthKeyFromDate(row.date);
       ensureSheet(store, sheetId);
-      store.expenses.push({ id: uid(), sheetId, categoryId: row.categoryId || null, amount, note, date: row.date });
+      store.expenses.push({
+        id: uid(),
+        sheetId,
+        categoryId: row.categoryId || null,
+        amount,
+        note,
+        date: row.date,
+        reward: Number(row.reward) || 0,
+        source: source || 'import'
+      });
       imported++;
     });
     if (imported > 0) {
@@ -568,6 +590,22 @@ const db = {
     }
     saveDb(store);
     return { imported, skipped };
+  },
+
+  // For cleaning up after a bad statement import (e.g. a parsing bug that
+  // picked up the wrong column) without having to hand-delete every row it
+  // added. Only reaches expenses tagged with that exact source - manual
+  // entries and imports from the other path are never touched.
+  async deleteExpensesBySource(source) {
+    const store = loadDb();
+    const before = store.expenses.length;
+    store.expenses = store.expenses.filter(e => e.source !== source);
+    saveDb(store);
+    return before - store.expenses.length;
+  },
+
+  async countExpensesBySource(source) {
+    return loadDb().expenses.filter(e => e.source === source).length;
   },
 
   // ---- Budget categories ----
@@ -643,7 +681,7 @@ const db = {
   // in the right place even if you're back-filling a past month's spending.
   // The view follows: after saving, the active sheet becomes that date's
   // month, so the entry is immediately visible.
-  async addExpense({ categoryId, amount, note, date }) {
+  async addExpense({ categoryId, amount, note, date, reward }) {
     const store = loadDb();
     const expenseDate = date || todayStr();
     const sheetId = monthKeyFromDate(expenseDate);
@@ -654,7 +692,9 @@ const db = {
       categoryId: categoryId || null,
       amount: Number(amount) || 0,
       note: (note || '').trim(),
-      date: expenseDate
+      date: expenseDate,
+      reward: Number(reward) || 0,
+      source: 'manual'
     };
     store.expenses.push(expense);
     store.activeSheetId = sheetId;
@@ -662,7 +702,7 @@ const db = {
     return expense;
   },
 
-  async updateExpense(id, { categoryId, amount, note, date }) {
+  async updateExpense(id, { categoryId, amount, note, date, reward }) {
     const store = loadDb();
     const expense = store.expenses.find(e => e.id === id);
     if (!expense) return null;
@@ -670,6 +710,7 @@ const db = {
     expense.amount = Number(amount) || 0;
     expense.note = (note || '').trim();
     expense.date = date || expense.date;
+    expense.reward = Number(reward) || 0;
     expense.sheetId = monthKeyFromDate(expense.date);
     ensureSheet(store, expense.sheetId);
     store.activeSheetId = expense.sheetId;
@@ -681,6 +722,15 @@ const db = {
     const store = loadDb();
     store.expenses = store.expenses.filter(e => e.id !== id);
     saveDb(store);
+  },
+
+  async deleteExpenses(ids) {
+    const store = loadDb();
+    const idSet = new Set(ids);
+    const before = store.expenses.length;
+    store.expenses = store.expenses.filter(e => !idSet.has(e.id));
+    saveDb(store);
+    return before - store.expenses.length;
   },
 
   // ---- Share (live read-only link) ----

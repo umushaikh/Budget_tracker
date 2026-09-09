@@ -307,6 +307,25 @@ body {
 .entry-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .entry-amount { font-weight: 700; font-size: 15px; flex-shrink: 0; }
 
+.entry-row.selectable { gap: 12px; }
+.expense-select-cb { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+.reward-tag { color: var(--accent); font-weight: 700; }
+.reward-total { font-size: 13px; font-weight: 700; color: var(--accent); text-align: center; margin: -4px 0 14px; }
+
+.section-title-row { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 10px; }
+.section-title-row .section-title { margin: 0; }
+.text-btn { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 700; padding: 4px 0; cursor: pointer; }
+.text-btn:active { opacity: 0.6; }
+
+.select-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 2px 12px;
+}
+.select-bar span { font-size: 13px; color: var(--text-dim); font-weight: 600; }
+
 /* Sheet selector + category filter chips */
 .chip-row {
   display: flex;
@@ -445,6 +464,7 @@ body {
   color: var(--danger);
   border: 1px solid var(--border);
 }
+.danger-btn:disabled { opacity: 0.35; cursor: default; }
 .primary-btn.small, .secondary-btn.small { padding: 8px 15px; font-size: 13px; }
 .full { width: 100%; display: block; text-align: center; margin-top: 10px; }
 .file-label { cursor: pointer; }

@@ -22,6 +22,8 @@ const state = {
   activeTab: 'overview',
   incomeSegment: 'income',
   expenseFilter: 'all',
+  expenseSelectMode: false,
+  selectedExpenseIds: new Set(),
   manageSelectedPropertyId: null,
   manageFilter: 'all',
   editingIncomeSource: null,
@@ -187,27 +189,82 @@ async function extractLinesFromPdf(arrayBuffer) {
   return lines;
 }
 
-// Best-effort: finds a date and a trailing money amount on each line and
-// treats what's left as the description. This catches common single-column
-// "date ... description ... amount" statement layouts and misses others -
-// bank PDF layouts vary too much to handle generically, which is exactly
-// why every extracted row still goes through the same review-and-categorize
-// preview as a CSV import before anything is actually saved.
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Repeatedly strips a trailing "N.NN"-shaped number off the end of a line,
+// closest one first, up to 3. A statement row is often more than just
+// "description amount" - many print a running balance after the amount, and
+// some (like the one this app was actually tested against) print a
+// cashback/rewards figure between the two. Reading right-to-left is what
+// makes it possible to tell those apart: the last number on the line is
+// always whatever comes last in the table, not necessarily the transaction
+// amount itself.
+function extractTrailingAmounts(line) {
+  const numRe = /(-?\(?\s?[\d,]+\.\d{2}\)?)\s*(?:AED|USD|Dr|Cr|DR|CR)?\s*$/i;
+  const found = [];
+  let rest = line;
+  while (found.length < 3) {
+    const m = rest.match(numRe);
+    if (!m) break;
+    found.unshift(m[1]);
+    rest = rest.slice(0, m.index).trimEnd();
+  }
+  return { amounts: found, rest };
+}
+
+// If what's left after stripping the date and amount columns ends in the
+// exact name of one of this app's own expense categories - the way a
+// statement's own "Tag"/"Category" column would read once it's been
+// smushed into one line of text - split it off and pre-select that
+// category instead of leaving the row Uncategorized. No match just means
+// no change: the row falls back to manual categorization in the preview
+// step, same as always.
+function matchCategoryTag(note) {
+  for (const cat of state.categories) {
+    const name = (cat.name || '').trim();
+    if (!name) continue;
+    const re = new RegExp(`(?:^|\\s)${escapeRegExp(name)}$`, 'i');
+    if (re.test(note)) {
+      return { note: note.replace(re, '').trim(), categoryId: cat.id };
+    }
+  }
+  return null;
+}
+
+// Best-effort: finds a date, then walks back from the end of the line
+// picking out amount/balance/reward columns, and treats what's left as the
+// description (and possibly a category tag). This catches common statement
+// table layouts and misses others - bank PDF layouts vary too much to
+// handle generically, which is exactly why every extracted row still goes
+// through the same review-and-categorize preview as a CSV import before
+// anything is actually saved.
 function parseTransactionLines(lines) {
   const dateRe = /\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/;
-  const amountRe = /(-?\(?\s?[\d,]+\.\d{2}\)?)\s*(?:AED|USD|Dr|Cr|DR|CR)?\s*$/;
   const rows = [];
   for (const line of lines) {
     const dateMatch = line.match(dateRe);
-    const amountMatch = line.match(amountRe);
-    if (!dateMatch || !amountMatch) continue;
+    if (!dateMatch) continue;
+    const { amounts, rest } = extractTrailingAmounts(line);
+    if (!amounts.length) continue;
+
+    // One trailing number is just the amount. Two is "amount, then running
+    // balance" - the balance is last, so the amount is the one before it.
+    // Three adds a rewards/cashback column before those two.
+    const amountRaw = amounts.length >= 2 ? amounts[amounts.length - 2] : amounts[0];
+    const rewardRaw = amounts.length >= 3 ? amounts[amounts.length - 3] : null;
+
     const date = parseCsvDate(dateMatch[1]);
-    const amount = parseCsvAmount(amountMatch[1]);
+    const amount = parseCsvAmount(amountRaw);
     if (!date || amount === null || amount === 0) continue;
-    const note = (line.slice(0, amountMatch.index) + line.slice(amountMatch.index + amountMatch[0].length))
-      .replace(dateMatch[0], '').replace(/\s{2,}/g, ' ').trim().slice(0, 140);
+    const reward = rewardRaw ? Math.abs(parseCsvAmount(rewardRaw) || 0) : 0;
+
+    let note = rest.replace(dateMatch[0], '').replace(/\s{2,}/g, ' ').trim().slice(0, 140);
+    const tagged = matchCategoryTag(note);
+    if (tagged) note = tagged.note;
     if (!note) continue;
-    rows.push({ date, amount: Math.abs(amount), note });
+    rows.push({ date, amount: Math.abs(amount), note, reward, categoryId: tagged ? tagged.categoryId : null });
   }
   return rows;
 }
@@ -727,6 +784,9 @@ function renderExpenses() {
 
   const all = sheetExpenses(state.activeSheetId);
   const total = all.reduce((s, e) => s + e.amount, 0);
+  const rewardTotal = all.reduce((s, e) => s + (e.reward || 0), 0);
+  document.getElementById('expenses-rewards-total').textContent = `+ ${formatMoney(rewardTotal)} cashback this month`;
+  document.getElementById('expenses-rewards-total').classList.toggle('hidden', rewardTotal <= 0);
 
   const byCategory = new Map();
   all.forEach(e => {
@@ -755,14 +815,28 @@ function renderExpenses() {
   const list = document.getElementById('expenses-list');
   list.innerHTML = filtered.length
     ? filtered.map(e => `
-      <div class="entry-row">
+      <div class="entry-row${state.expenseSelectMode ? ' selectable' : ''}">
+        ${state.expenseSelectMode
+          ? `<input type="checkbox" class="expense-select-cb" data-id="${e.id}" ${state.selectedExpenseIds.has(e.id) ? 'checked' : ''} />`
+          : ''}
         <button type="button" class="entry-info edit-expense-btn" data-id="${e.id}">
           <div class="entry-name">${escapeHtml(categoryName(e.categoryId))}${e.note ? ' · ' + escapeHtml(e.note) : ''}</div>
-          <div class="entry-sub">${e.date}</div>
+          <div class="entry-sub">${e.date}${e.reward ? ` · <span class="reward-tag">+${formatMoney(e.reward)} cashback</span>` : ''}</div>
         </button>
         <span class="entry-amount">${formatMoney(e.amount)}</span>
       </div>`).join('')
     : `<div class="empty-hint">No expenses in this filter.</div>`;
+
+  document.getElementById('add-expense-btn').classList.toggle('hidden', state.expenseSelectMode);
+  document.getElementById('expenses-select-toggle-btn').textContent = state.expenseSelectMode ? 'Cancel' : 'Select';
+  document.getElementById('expenses-select-bar').classList.toggle('hidden', !state.expenseSelectMode);
+  document.getElementById('expenses-select-count').textContent = `${state.selectedExpenseIds.size} selected`;
+  document.getElementById('expenses-delete-selected-btn').disabled = state.selectedExpenseIds.size === 0;
+
+  const pdfImportCount = state.expenses.filter(e => e.source === 'pdf').length;
+  const cleanupBtn = document.getElementById('delete-pdf-imports-btn');
+  cleanupBtn.classList.toggle('hidden', pdfImportCount === 0);
+  cleanupBtn.textContent = `Delete all PDF-imported expenses (${pdfImportCount})`;
 }
 
 // ---- Render: Share ----
@@ -985,8 +1059,10 @@ function openExpenseModal(expense) {
     form.date.value = expense.date;
     form.categoryId.value = expense.categoryId || '';
     form.note.value = expense.note || '';
+    form.reward.value = expense.reward || 0;
   } else {
     form.date.value = todayStr();
+    form.reward.value = 0;
   }
   document.getElementById('expense-delete').classList.toggle('hidden', !expense);
   openModal('expense-modal');
@@ -1051,16 +1127,18 @@ async function buildCandidatesFromRows(rawRows) {
     date: r.date,
     amount: r.amount,
     note: r.note,
-    categoryId: matchRule(r.note),
+    reward: r.reward || 0,
+    categoryId: r.categoryId || matchRule(r.note),
     duplicate: state.expenses.some(e => e.date === r.date && e.amount === r.amount && e.note === r.note)
   }));
 
   const merchants = new Map();
   candidates.forEach(c => {
-    if (!merchants.has(c.note)) merchants.set(c.note, { note: c.note, count: 0, total: 0, categoryId: c.categoryId, include: true });
+    if (!merchants.has(c.note)) merchants.set(c.note, { note: c.note, count: 0, total: 0, rewardTotal: 0, categoryId: c.categoryId, include: true });
     const m = merchants.get(c.note);
     m.count++;
     m.total += c.amount;
+    m.rewardTotal += c.reward;
   });
 
   csvImport.candidates = candidates;
@@ -1108,7 +1186,7 @@ function renderCsvPreviewStep() {
   document.getElementById('csv-merchant-list').innerHTML = csvImport.merchants.map((m, i) => `
     <div class="item-card">
       <label class="checkbox-row"><input type="checkbox" class="csv-include" data-idx="${i}" ${m.include ? 'checked' : ''} /> Include in import</label>
-      <div class="item-card-sub">${escapeHtml(m.note)} · ${m.count} transaction${m.count > 1 ? 's' : ''} · ${formatMoney(m.total)}</div>
+      <div class="item-card-sub">${escapeHtml(m.note)} · ${m.count} transaction${m.count > 1 ? 's' : ''} · ${formatMoney(m.total)}${m.rewardTotal > 0 ? ` · <span class="reward-tag">+${formatMoney(m.rewardTotal)} cashback</span>` : ''}</div>
       <select class="csv-merchant-category" data-idx="${i}">${categoryOptions}</select>
       <label class="checkbox-row"><input type="checkbox" class="csv-remember" data-idx="${i}" checked /> Remember this merchant</label>
     </div>`).join('');
@@ -1144,7 +1222,7 @@ async function confirmCsvImport() {
     .filter(c => !c.duplicate && includeByMerchant.get(c.note))
     .map(c => ({ ...c, categoryId: categoryByMerchant.get(c.note) }));
 
-  const result = await db.importExpenses(rows);
+  const result = await db.importExpenses(rows, csvImport.source);
   csvImport = null;
   closeModal('csv-import-modal');
   await refreshAll();
@@ -1524,12 +1602,46 @@ function wireEvents() {
   document.getElementById('add-expense-btn').addEventListener('click', () => openExpenseModal(null));
   document.getElementById('expenses-list').addEventListener('click', e => {
     const btn = e.target.closest('.edit-expense-btn');
-    if (btn) openExpenseModal(state.expenses.find(x => x.id === btn.dataset.id));
+    if (!btn) return;
+    if (state.expenseSelectMode) {
+      const id = btn.dataset.id;
+      if (state.selectedExpenseIds.has(id)) state.selectedExpenseIds.delete(id);
+      else state.selectedExpenseIds.add(id);
+      renderExpenses();
+      return;
+    }
+    openExpenseModal(state.expenses.find(x => x.id === btn.dataset.id));
+  });
+  document.getElementById('expenses-list').addEventListener('change', e => {
+    const cb = e.target.closest('.expense-select-cb');
+    if (!cb) return;
+    if (cb.checked) state.selectedExpenseIds.add(cb.dataset.id);
+    else state.selectedExpenseIds.delete(cb.dataset.id);
+    renderExpenses();
+  });
+  document.getElementById('expenses-select-toggle-btn').addEventListener('click', () => {
+    state.expenseSelectMode = !state.expenseSelectMode;
+    state.selectedExpenseIds.clear();
+    renderExpenses();
+  });
+  document.getElementById('expenses-delete-selected-btn').addEventListener('click', async () => {
+    const count = state.selectedExpenseIds.size;
+    if (!count || !confirm(`Delete ${count} selected expense${count === 1 ? '' : 's'}? This can't be undone.`)) return;
+    await db.deleteExpenses([...state.selectedExpenseIds]);
+    state.expenseSelectMode = false;
+    state.selectedExpenseIds.clear();
+    await refreshAll();
+  });
+  document.getElementById('delete-pdf-imports-btn').addEventListener('click', async () => {
+    const count = state.expenses.filter(e => e.source === 'pdf').length;
+    if (!count || !confirm(`Delete all ${count} expense${count === 1 ? '' : 's'} imported from a PDF statement? This can't be undone.`)) return;
+    await db.deleteExpensesBySource('pdf');
+    await refreshAll();
   });
   document.getElementById('expense-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const payload = { categoryId: f.get('categoryId') || null, amount: f.get('amount'), note: f.get('note'), date: f.get('date') };
+    const payload = { categoryId: f.get('categoryId') || null, amount: f.get('amount'), note: f.get('note'), date: f.get('date'), reward: f.get('reward') };
     if (state.editingExpense) await db.updateExpense(state.editingExpense, payload);
     else await db.addExpense(payload);
     closeModal('expense-modal');

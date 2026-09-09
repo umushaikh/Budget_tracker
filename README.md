@@ -64,27 +64,39 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
   Rent, Utilities, ... or your own), each with its own monthly budget.
   A progress bar on every category tracks what you've actually spent
   against it for the currently viewed month.
-- **Expenses** — log expenses against a category with an amount, date, and
-  optional note. ‹ › arrows move between calendar months — each one is
-  created automatically the first time you visit or log something in it,
-  and an expense always lands in the month of its own date, not whichever
-  month happened to be on screen when you added it (so back-filling a past
-  month's spending just works). A pie chart and per-category legend show
-  the current month's spending at a glance; chips filter the list down to
-  one category at a time. **Import bank/card statement (CSV or PDF)**
-  bulk-adds expenses from an exported statement instead of typing each one
-  in.
+- **Expenses** — log expenses against a category with an amount, date, an
+  optional note, and any cashback or reward earned on the purchase (shows
+  next to it in the list, with a running total for the month). ‹ › arrows
+  move between calendar months — each one is created automatically the
+  first time you visit or log something in it, and an expense always lands
+  in the month of its own date, not whichever month happened to be on
+  screen when you added it (so back-filling a past month's spending just
+  works). A pie chart and per-category legend show the current month's
+  spending at a glance; chips filter the list down to one category at a
+  time. **Select** turns the list into checkboxes for deleting several
+  expenses at once — handy for undoing a bad import without hand-deleting
+  every row. **Import bank/card statement (CSV or PDF)** bulk-adds expenses
+  from an exported statement instead of typing each one in.
   - **CSV**: pick which column is the date/amount/description once
     (remembered next time you import that bank's format), and whether
     spending shows as negative or positive numbers.
   - **PDF**: a PDF reader library ([pdf.js](https://mozilla.github.io/pdf.js/),
     fetched from a CDN the first time you use this — the statement itself
     is still never uploaded anywhere) extracts the text and looks for
-    lines that read as "date ... amount". Bank PDF layouts vary a lot, so
-    treat this as best-effort — it can't reliably tell a purchase from a
-    salary deposit or refund the way a CSV's sign column can, which is
-    what the "Include in import" checkbox on every merchant is for. CSV
-    export is more reliable if a PDF doesn't parse well.
+    lines that read as "date ... amount". A row that ends in more than one
+    number is read right-to-left — the last is treated as a running
+    balance (not the transaction itself), the one before it as the actual
+    amount, and a third as a cashback/rewards figure, which covers common
+    statement layouts that print a balance (or balance and rewards) after
+    every line. If what's left over ends in the exact name of one of your
+    own categories, it's split off and pre-selected as that expense's
+    category too. Bank PDF layouts vary a lot, so treat this as best-effort
+    — it can't reliably tell a purchase from a salary deposit or refund the
+    way a CSV's sign column can, which is what the "Include in import"
+    checkbox on every merchant is for. A "Delete all PDF-imported expenses"
+    button appears once any exist, for undoing a statement that came in
+    wrong in one tap. CSV export is more reliable if a PDF doesn't parse
+    well.
   - Either way, the next step is the same: categorize each merchant that
     appears — optionally "remember" it so future imports with that
     merchant auto-categorize themselves — and uncheck "Include in import"

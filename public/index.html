@@ -198,11 +198,19 @@
       </div>
       <div id="expenses-pie-empty" class="pie-empty hidden">Nothing logged in this month yet.</div>
       <div id="expenses-legend" class="list"></div>
+      <div id="expenses-rewards-total" class="reward-total hidden"></div>
 
-      <div class="section-title">Filter by category</div>
+      <div class="section-title-row">
+        <div class="section-title">Filter by category</div>
+        <button type="button" id="expenses-select-toggle-btn" class="text-btn">Select</button>
+      </div>
       <div id="expenses-filter" class="chip-row"></div>
 
       <div id="expenses-list" class="list"></div>
+      <div id="expenses-select-bar" class="select-bar hidden">
+        <span id="expenses-select-count"></span>
+        <button type="button" id="expenses-delete-selected-btn" class="danger-btn" disabled>Delete selected</button>
+      </div>
       <button type="button" id="add-expense-btn" class="primary-btn full">+ Add expense</button>
       <label class="secondary-btn full file-label" id="csv-file-label">
         Import bank/card statement (CSV)
@@ -213,6 +221,7 @@
         <input id="pdf-file-input" type="file" accept=".pdf,application/pdf" hidden />
       </label>
       <p class="field-hint">PDF statements are read entirely on your device too, using a PDF reader library fetched once from a CDN the first time you use this. Layouts vary a lot between banks — check the preview carefully before importing; CSV export is more reliable if a PDF doesn't parse well.</p>
+      <button type="button" id="delete-pdf-imports-btn" class="danger-btn full hidden"></button>
     </section>
 
     <section id="tab-share" class="tab-panel">
@@ -478,6 +487,7 @@
         <select name="categoryId" id="expense-category-select"></select>
       </label>
       <label class="field">Note (optional)<input name="note" type="text" maxlength="140" placeholder="What was this for?" /></label>
+      <label class="field">Cashback / reward earned (optional)<input name="reward" type="number" step="any" min="0" value="0" /></label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="expense-delete" class="danger-btn full hidden">Delete</button>
     </form>
