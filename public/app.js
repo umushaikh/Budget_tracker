@@ -972,9 +972,17 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('scroll', syncViewportHeight);
 }
 window.addEventListener('resize', syncViewportHeight);
+// iOS, running as an installed home-screen app, doesn't always fire a
+// visualViewport resize event when the on-screen keyboard closes - so a
+// modal shrunk to fit above the keyboard can get stuck small, with the
+// page behind it showing through beneath. Re-checking a beat after any
+// field loses focus (long enough for the keyboard's own dismiss animation
+// to finish) catches that case even when the event above doesn't fire.
+document.addEventListener('focusout', () => setTimeout(syncViewportHeight, 300));
 syncViewportHeight();
 
 function openModal(id) {
+  syncViewportHeight();
   const modal = document.getElementById(id);
   const alreadyOpen = document.querySelectorAll('.modal:not(.hidden)').length;
   modal.style.zIndex = String(20 + alreadyOpen);
