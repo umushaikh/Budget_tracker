@@ -26,6 +26,16 @@ const CATEGORY_PALETTE = [
   '#c792ff', '#ff8a5c', '#8fd14f', '#ffd166', '#6ec6ff'
 ];
 
+// Number(x) || 100 looks like a safe default but silently turns an explicit
+// 0% share into 100%, since 0 is falsy - use this instead anywhere a share
+// percentage is parsed from user input.
+function clampSharePct(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 100;
+}
+
+const PROPERTY_TYPES = ['Studio', '1 Bedroom', '2 Bedroom', '3 Bedroom', '4+ Bedroom', 'Villa', 'Townhouse', 'Penthouse', 'Office', 'Other'];
+
 function categoryColor(categories, categoryId) {
   const idx = categories.findIndex(c => c.id === categoryId);
   return CATEGORY_PALETTE[(idx < 0 ? 0 : idx) % CATEGORY_PALETTE.length];
@@ -74,6 +84,7 @@ function seedStore() {
     settings: { theme: 'dark', currency: 'AED', onboarded: false },
     incomeSources: [],
     properties: [],
+    propertyTransactions: [],
     categories: DEFAULT_CATEGORIES.map(name => ({ id: uid(), name, monthlyBudget: 0 })),
     sheets: [{ id: key, name: monthLabel(key), createdAt: Date.now() }],
     activeSheetId: key,
@@ -146,6 +157,7 @@ function loadDb() {
       if (!parsed.settings) parsed.settings = { theme: 'dark', currency: 'AED', onboarded: false };
       if (!parsed.incomeSources) parsed.incomeSources = [];
       if (!parsed.properties) parsed.properties = [];
+      if (!parsed.propertyTransactions) parsed.propertyTransactions = [];
       if (!parsed.categories) parsed.categories = [];
       if (!parsed.sheets) parsed.sheets = [];
       if (!parsed.expenses) parsed.expenses = [];
@@ -228,14 +240,15 @@ const db = {
     return loadDb().properties;
   },
 
-  async addProperty({ name, annualGrossIncome, annualServiceCharges, sharePct, vacant }) {
+  async addProperty({ name, type, annualGrossIncome, annualServiceCharges, sharePct, vacant }) {
     const store = loadDb();
     const property = {
       id: uid(),
       name: (name || '').trim() || 'Apartment',
+      type: PROPERTY_TYPES.includes(type) ? type : '',
       annualGrossIncome: Number(annualGrossIncome) || 0,
       annualServiceCharges: Number(annualServiceCharges) || 0,
-      sharePct: Math.max(0, Math.min(100, Number(sharePct) || 100)),
+      sharePct: clampSharePct(sharePct),
       vacant: !!vacant
     };
     store.properties.push(property);
@@ -243,14 +256,15 @@ const db = {
     return property;
   },
 
-  async updateProperty(id, { name, annualGrossIncome, annualServiceCharges, sharePct, vacant }) {
+  async updateProperty(id, { name, type, annualGrossIncome, annualServiceCharges, sharePct, vacant }) {
     const store = loadDb();
     const property = store.properties.find(p => p.id === id);
     if (!property) return null;
     property.name = (name || '').trim() || 'Apartment';
+    property.type = PROPERTY_TYPES.includes(type) ? type : '';
     property.annualGrossIncome = Number(annualGrossIncome) || 0;
     property.annualServiceCharges = Number(annualServiceCharges) || 0;
-    property.sharePct = Math.max(0, Math.min(100, Number(sharePct) || 100));
+    property.sharePct = clampSharePct(sharePct);
     property.vacant = !!vacant;
     saveDb(store);
     return property;
@@ -271,6 +285,54 @@ const db = {
         }
       });
     }
+    // Unlike an investment, a rent/cost ledger has no meaning once its
+    // apartment is gone - nothing to unlink it to - so it goes with it.
+    store.propertyTransactions = store.propertyTransactions.filter(t => t.propertyId !== id);
+    saveDb(store);
+  },
+
+  // ---- Property management: rent payments & maintenance costs ----
+  // A per-apartment ledger, deliberately kept separate from the Income tab's
+  // annual gross/service-charge figures - those stay a simple yearly
+  // projection, while this is the actual history of what came in and what
+  // got spent on a given apartment.
+
+  async getPropertyTransactions(propertyId) {
+    return loadDb().propertyTransactions
+      .filter(t => t.propertyId === propertyId)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  },
+
+  async addPropertyTransaction({ propertyId, type, date, amount, note }) {
+    const store = loadDb();
+    const txn = {
+      id: uid(),
+      propertyId,
+      type: type === 'cost' ? 'cost' : 'payment',
+      date: date || todayStr(),
+      amount: Number(amount) || 0,
+      note: (note || '').trim()
+    };
+    store.propertyTransactions.push(txn);
+    saveDb(store);
+    return txn;
+  },
+
+  async updatePropertyTransaction(id, { type, date, amount, note }) {
+    const store = loadDb();
+    const txn = store.propertyTransactions.find(t => t.id === id);
+    if (!txn) return null;
+    txn.type = type === 'cost' ? 'cost' : 'payment';
+    txn.date = date || txn.date;
+    txn.amount = Number(amount) || 0;
+    txn.note = (note || '').trim();
+    saveDb(store);
+    return txn;
+  },
+
+  async deletePropertyTransaction(id) {
+    const store = loadDb();
+    store.propertyTransactions = store.propertyTransactions.filter(t => t.id !== id);
     saveDb(store);
   },
 
@@ -317,7 +379,7 @@ const db = {
       category: store.investmentCategories.includes(category) ? category : 'Other',
       value: Number(value) || 0,
       propertyId: propertyId || null,
-      sharePct: Math.max(0, Math.min(100, Number(sharePct) || 100))
+      sharePct: clampSharePct(sharePct)
     };
     store.investments.push(investment);
     saveDb(store);
@@ -332,7 +394,7 @@ const db = {
     investment.category = store.investmentCategories.includes(category) ? category : 'Other';
     investment.value = Number(value) || 0;
     investment.propertyId = propertyId || null;
-    investment.sharePct = Math.max(0, Math.min(100, Number(sharePct) || 100));
+    investment.sharePct = clampSharePct(sharePct);
     saveDb(store);
     return investment;
   },
@@ -645,6 +707,7 @@ const db = {
       settings: store.settings,
       incomeSources: store.incomeSources,
       properties: store.properties,
+      propertyTransactions: store.propertyTransactions,
       categories: store.categories,
       sheets: store.sheets,
       activeSheetId: store.activeSheetId,
@@ -662,13 +725,14 @@ const db = {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('That file is not a Budget Tracker backup.');
     }
-    const { incomeSources, properties, categories, expenses, investments, investmentCategories, cashAccounts, receivables, payables, importRules } = payload;
+    const { incomeSources, properties, propertyTransactions, categories, expenses, investments, investmentCategories, cashAccounts, receivables, payables, importRules } = payload;
     if (!Array.isArray(categories) || !Array.isArray(expenses)) {
       throw new Error('That file is missing budget data, so it is not a Budget Tracker backup.');
     }
     const store = loadDb();
     store.incomeSources = Array.isArray(incomeSources) ? incomeSources : [];
     store.properties = Array.isArray(properties) ? properties : [];
+    store.propertyTransactions = Array.isArray(propertyTransactions) ? propertyTransactions : [];
     store.categories = categories;
     store.expenses = expenses;
     store.investments = Array.isArray(investments) ? investments : [];

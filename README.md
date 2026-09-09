@@ -13,15 +13,29 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
 
 ## Features
 
-- **Income & Net Worth** — one tab, two segments (like Foods/Recipes in the
-  family's calorie counter):
+- **Income, Net Worth & Manage** — one tab, three segments (like
+  Foods/Recipes in the family's calorie counter):
   - **Income** — add salary or any other regular income (monthly or yearly),
-    plus every apartment you earn rent from. Properties are entered as gross
-    rent per year and service charges per year — the app subtracts them for
-    you, live, and shows the net figure as you type — then split by however
-    much of the apartment you own (100% by default, less if you own a
-    share). A **vacant** toggle zeroes a property's contribution to your
-    income while keeping it listed, for the ones not currently earning.
+    plus every apartment you earn rent from, with its type (Studio, 1/2/3/4+
+    Bedroom, Villa, Townhouse, Penthouse, Office). Properties are entered as
+    gross rent per year and service charges per year — the app subtracts
+    them for you, live, and shows the net figure as you type — then split
+    by however much of the apartment you own (100% by default, less if you
+    own a share; a live preview shows your share's actual yearly and
+    monthly value as you adjust it). Each property's card always shows
+    both the full net figure and, right below it, "Your N% share" in plain
+    numbers, so the share's effect is never just an invisible multiplier
+    buried in the monthly total. A **vacant** toggle zeroes a property's
+    contribution to your income while keeping it listed, for the ones not
+    currently earning.
+  - **Manage** — a per-apartment ledger of rent payments received and
+    maintenance costs paid, kept deliberately separate from Income's
+    gross/service-charge projection above (that stays a simple yearly
+    estimate; this is the actual history). Pick an apartment from the chip
+    row, log payments and costs with a date, amount and note, filter by
+    type, and see collected / costs / net for that property. Deleting an
+    apartment removes its ledger with it — there's nothing left for it to
+    attach to.
   - **Net Worth** — everything you own against everything you owe:
     investments by category (Real Estate, Stocks & Funds, Business, Gold,
     Vehicles, Crypto, Other, or add your own from the investment editor's +

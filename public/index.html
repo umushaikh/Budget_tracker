@@ -69,6 +69,7 @@
       <div class="segmented">
         <button type="button" class="seg-btn active" data-segment="income" id="seg-income-btn">Income</button>
         <button type="button" class="seg-btn" data-segment="networth" id="seg-networth-btn">Net Worth</button>
+        <button type="button" class="seg-btn" data-segment="manage" id="seg-manage-btn">Manage</button>
       </div>
 
       <div id="income-section">
@@ -120,6 +121,34 @@
         <div class="section-title">Money you owe</div>
         <div id="payables-list" class="list"></div>
         <button type="button" id="add-payable-btn" class="secondary-btn full">+ Add</button>
+      </div>
+
+      <div id="manage-section" class="hidden">
+        <p class="panel-lede">Track rent payments and maintenance costs per apartment, kept separate from the income projection above — this is what actually happened, not the yearly estimate.</p>
+
+        <div id="manage-no-properties" class="empty-hint hidden">Add an apartment in Income first, then come back here to track its rent and costs.</div>
+
+        <div id="manage-property-picker" class="chip-row"></div>
+
+        <div id="manage-content" class="hidden">
+          <div class="budget-card" style="text-align:center">
+            <div id="manage-net" class="budget-remaining">AED 0</div>
+            <div class="budget-remaining-label">net (collected &minus; costs)</div>
+            <div class="budget-stats">
+              <div class="budget-stat"><span id="manage-payments-total">0</span><label>Collected</label></div>
+              <div class="budget-stat"><span id="manage-costs-total">0</span><label>Costs</label></div>
+            </div>
+          </div>
+
+          <div id="manage-filter" class="chip-row">
+            <button type="button" class="chip active" data-filter="all">All</button>
+            <button type="button" class="chip" data-filter="payment">Payments</button>
+            <button type="button" class="chip" data-filter="cost">Costs</button>
+          </div>
+
+          <div id="manage-transactions-list" class="list"></div>
+          <button type="button" id="add-property-transaction-btn" class="primary-btn full">+ Add entry</button>
+        </div>
       </div>
     </section>
 
@@ -245,11 +274,17 @@
     </div>
     <form id="property-form">
       <label class="field">Name<input name="name" type="text" placeholder="e.g. Marina Tower 1204" required /></label>
+      <label class="field">Type
+        <select name="type" id="property-type-select"></select>
+      </label>
       <div class="field-row">
         <label class="field">Rent income per year (gross)<input name="annualGrossIncome" type="number" step="any" min="0" required /></label>
         <label class="field">Service charges per year<input name="annualServiceCharges" type="number" step="any" min="0" value="0" /></label>
       </div>
-      <div class="net-preview">Net income: <strong id="property-net-preview">AED 0 / year</strong></div>
+      <div class="net-preview">
+        Net income: <strong id="property-net-preview">AED 0 / year</strong><br />
+        Your share: <strong id="property-share-preview">AED 0 / year</strong>
+      </div>
       <label class="field">Your ownership share
         <input name="sharePct" type="number" step="any" min="0" max="100" value="100" />
         <p class="field-hint">100% if you own the whole apartment, less if you own a share of it.</p>
@@ -260,6 +295,31 @@
       </label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="property-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- Property rent payment / maintenance cost entry -->
+<div id="property-transaction-modal" class="modal hidden" data-close-modal="property-transaction-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3 id="property-transaction-title">Add entry</h3>
+      <button class="icon-btn" data-close-modal="property-transaction-modal">✕</button>
+    </div>
+    <form id="property-transaction-form">
+      <label class="field">Type
+        <select name="type">
+          <option value="payment">Rent payment received</option>
+          <option value="cost">Maintenance / cost</option>
+        </select>
+      </label>
+      <div class="field-row">
+        <label class="field">Amount<input name="amount" type="number" step="any" min="0" required /></label>
+        <label class="field">Date<input name="date" type="date" required /></label>
+      </div>
+      <label class="field">Note (optional)<input name="note" type="text" maxlength="140" placeholder="e.g. September rent, AC repair" /></label>
+      <button type="submit" class="primary-btn full">Save</button>
+      <button type="button" id="property-transaction-delete" class="danger-btn full hidden">Delete</button>
     </form>
   </div>
 </div>

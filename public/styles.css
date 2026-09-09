@@ -281,6 +281,7 @@ body {
 }
 .tag.vacant { background: var(--danger-soft); color: var(--danger); }
 .tag.share { background: var(--accent-soft); color: var(--accent); }
+.tag.type { background: var(--track); color: var(--text-dim); }
 
 .progress-track { height: 9px; border-radius: var(--r-pill); background: var(--track); overflow: hidden; margin-top: 10px; }
 .progress-fill { height: 100%; border-radius: var(--r-pill); transition: width 0.3s ease; background: var(--accent); }

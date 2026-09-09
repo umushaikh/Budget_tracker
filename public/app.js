@@ -18,9 +18,12 @@ const state = {
   cashAccounts: [],
   receivables: [],
   payables: [],
+  propertyTransactions: [],
   activeTab: 'overview',
   incomeSegment: 'income',
   expenseFilter: 'all',
+  manageSelectedPropertyId: null,
+  manageFilter: 'all',
   editingIncomeSource: null,
   editingProperty: null,
   editingCategory: null,
@@ -28,7 +31,8 @@ const state = {
   editingInvestment: null,
   editingCashAccount: null,
   editingReceivable: null,
-  editingPayable: null
+  editingPayable: null,
+  editingPropertyTransaction: null
 };
 
 let sharePushTimer = null;
@@ -323,13 +327,87 @@ function renderOverview() {
   }
 }
 
-// ---- Render: Income & Net Worth (one tab, two segments) ----
+// ---- Render: Income, Net Worth & Manage (one tab, three segments) ----
 
 function applyIncomeSegment() {
   document.getElementById('income-section').classList.toggle('hidden', state.incomeSegment !== 'income');
   document.getElementById('networth-section').classList.toggle('hidden', state.incomeSegment !== 'networth');
+  document.getElementById('manage-section').classList.toggle('hidden', state.incomeSegment !== 'manage');
   document.getElementById('seg-income-btn').classList.toggle('active', state.incomeSegment === 'income');
   document.getElementById('seg-networth-btn').classList.toggle('active', state.incomeSegment === 'networth');
+  document.getElementById('seg-manage-btn').classList.toggle('active', state.incomeSegment === 'manage');
+  if (state.incomeSegment === 'manage') renderManage();
+}
+
+// A per-apartment ledger of what actually happened - rent collected and
+// costs paid - kept deliberately separate from Income's yearly gross/net
+// projection above. Scoped to one property at a time via the chip picker,
+// since a ledger for every apartment stacked in one list would bury the one
+// you're actually looking at.
+function renderManage() {
+  const picker = document.getElementById('manage-property-picker');
+  const noProperties = document.getElementById('manage-no-properties');
+  const content = document.getElementById('manage-content');
+
+  if (!state.properties.length) {
+    noProperties.classList.remove('hidden');
+    picker.innerHTML = '';
+    content.classList.add('hidden');
+    return;
+  }
+  noProperties.classList.add('hidden');
+  content.classList.remove('hidden');
+
+  if (!state.manageSelectedPropertyId || !state.properties.some(p => p.id === state.manageSelectedPropertyId)) {
+    state.manageSelectedPropertyId = state.properties[0].id;
+  }
+
+  picker.innerHTML = state.properties.map(p =>
+    `<button type="button" class="chip${p.id === state.manageSelectedPropertyId ? ' active' : ''}" data-property-id="${p.id}">${escapeHtml(p.name)}</button>`
+  ).join('');
+
+  const all = state.propertyTransactions.filter(t => t.propertyId === state.manageSelectedPropertyId);
+  const payments = all.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0);
+  const costs = all.filter(t => t.type === 'cost').reduce((s, t) => s + t.amount, 0);
+  const net = payments - costs;
+
+  document.getElementById('manage-net').textContent = formatMoney(net);
+  document.getElementById('manage-net').classList.toggle('negative', net < 0);
+  document.getElementById('manage-payments-total').textContent = formatMoney(payments);
+  document.getElementById('manage-costs-total').textContent = formatMoney(costs);
+
+  document.querySelectorAll('#manage-filter .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === state.manageFilter));
+
+  const filtered = (state.manageFilter === 'all' ? all : all.filter(t => t.type === state.manageFilter))
+    .slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  document.getElementById('manage-transactions-list').innerHTML = filtered.length
+    ? filtered.map(t => `
+      <div class="entry-row">
+        <button type="button" class="entry-info edit-property-transaction-btn" data-id="${t.id}">
+          <div class="entry-name">${t.type === 'payment' ? '💰 Rent payment' : '🔧 Maintenance / cost'}${t.note ? ' · ' + escapeHtml(t.note) : ''}</div>
+          <div class="entry-sub">${t.date}</div>
+        </button>
+        <span class="entry-amount" style="${t.type === 'cost' ? 'color:var(--danger)' : ''}">${t.type === 'cost' ? '&minus;' : ''}${formatMoney(t.amount)}</span>
+      </div>`).join('')
+    : `<div class="empty-hint">No entries in this filter.</div>`;
+}
+
+function openPropertyTransactionModal(txn) {
+  state.editingPropertyTransaction = txn ? txn.id : null;
+  document.getElementById('property-transaction-title').textContent = txn ? 'Edit entry' : 'Add entry';
+  const form = document.getElementById('property-transaction-form');
+  form.reset();
+  if (txn) {
+    form.type.value = txn.type;
+    form.amount.value = txn.amount;
+    form.date.value = txn.date;
+    form.note.value = txn.note || '';
+  } else {
+    form.date.value = todayStr();
+  }
+  document.getElementById('property-transaction-delete').classList.toggle('hidden', !txn);
+  openModal('property-transaction-modal');
 }
 
 function renderIncome() {
@@ -349,17 +427,28 @@ function renderIncome() {
 
   const propertiesList = document.getElementById('properties-list');
   propertiesList.innerHTML = state.properties.length
-    ? state.properties.map(p => `
+    ? state.properties.map(p => {
+      const netAnnual = propertyNetAnnual(p);
+      const yourShareAnnual = netAnnual * (p.sharePct / 100);
+      // The net/year figure above is deliberately the full property basis,
+      // unaffected by share - this line is what actually makes the share's
+      // effect visible, rather than only showing up in the /month total.
+      const shareLine = p.sharePct < 100
+        ? `<div class="item-card-sub">Your ${p.sharePct}% share: ${formatMoney(yourShareAnnual)} / year</div>`
+        : '';
+      return `
       <div class="item-card" data-property-id="${p.id}">
         <div class="item-card-head">
           <button type="button" class="entry-info edit-property-btn" data-id="${p.id}">
-            <h3>${escapeHtml(p.name)}${p.vacant ? '<span class="tag vacant">Vacant</span>' : ''}${p.sharePct < 100 ? `<span class="tag share">${p.sharePct}% share</span>` : ''}</h3>
-            <div class="item-card-sub">${formatMoney(p.annualGrossIncome)} gross &minus; ${formatMoney(p.annualServiceCharges)} service charges = ${formatMoney(propertyNetAnnual(p))} net / year</div>
+            <h3>${escapeHtml(p.name)}${p.type ? `<span class="tag type">${escapeHtml(p.type)}</span>` : ''}${p.vacant ? '<span class="tag vacant">Vacant</span>' : ''}${p.sharePct < 100 ? `<span class="tag share">${p.sharePct}% share</span>` : ''}</h3>
+            <div class="item-card-sub">${formatMoney(p.annualGrossIncome)} gross &minus; ${formatMoney(p.annualServiceCharges)} service charges = ${formatMoney(netAnnual)} net / year</div>
+            ${shareLine}
           </button>
         </div>
         <div class="item-card-value${p.vacant ? ' muted' : ''}">${formatMoney(propertyMonthly(p))} <span class="item-card-sub" style="display:inline">/ month${p.vacant ? ' (vacant)' : ''}</span></div>
         ${propertyNetWorthRow(p)}
-      </div>`).join('')
+      </div>`;
+    }).join('')
     : `<div class="empty-hint">No apartments added yet.</div>`;
 }
 
@@ -599,6 +688,8 @@ function render() {
     state.investmentCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
   document.getElementById('investment-property-select').innerHTML = `<option value="">Not linked</option>` +
     state.properties.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  document.getElementById('property-type-select').innerHTML = `<option value="">Not specified</option>` +
+    PROPERTY_TYPES.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
 
   queueSharePush();
 }
@@ -703,6 +794,7 @@ function openPropertyModal(property) {
   form.reset();
   if (property) {
     form.name.value = property.name;
+    form.type.value = property.type || '';
     form.annualGrossIncome.value = property.annualGrossIncome;
     form.annualServiceCharges.value = property.annualServiceCharges;
     form.sharePct.value = property.sharePct;
@@ -715,10 +807,18 @@ function openPropertyModal(property) {
   openModal('property-modal');
 }
 
+// Shows the share's effect live, right where you're changing it - the fix
+// for how easy it was to miss that the share was already being applied
+// (see propertyMonthly): the property card's own "net / year" is deliberately
+// the full figure, unaffected by share, and only a separate line further
+// down showed the share-adjusted number.
 function updatePropertyNetPreview() {
   const form = document.getElementById('property-form');
   const net = (Number(form.annualGrossIncome.value) || 0) - (Number(form.annualServiceCharges.value) || 0);
-  document.getElementById('property-net-preview').textContent = `${formatMoney(net)} / year net`;
+  document.getElementById('property-net-preview').textContent = `${formatMoney(net)} / year`;
+  const sharePct = Math.max(0, Math.min(100, Number(form.sharePct.value) || 0));
+  const yourShare = net * (sharePct / 100);
+  document.getElementById('property-share-preview').textContent = `${formatMoney(yourShare)} / year (${formatMoney(yourShare / 12)} / month)`;
 }
 
 function openCategoryModal(category) {
@@ -989,6 +1089,7 @@ async function refreshAll() {
   state.cashAccounts = all.cashAccounts;
   state.receivables = all.receivables;
   state.payables = all.payables;
+  state.propertyTransactions = all.propertyTransactions;
   render();
 }
 
@@ -1007,6 +1108,41 @@ function wireEvents() {
       state.incomeSegment = btn.dataset.segment;
       applyIncomeSegment();
     });
+  });
+
+  // Manage segment
+  document.getElementById('manage-property-picker').addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    state.manageSelectedPropertyId = chip.dataset.propertyId;
+    renderManage();
+  });
+  document.getElementById('manage-filter').addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    state.manageFilter = chip.dataset.filter;
+    renderManage();
+  });
+  document.getElementById('add-property-transaction-btn').addEventListener('click', () => openPropertyTransactionModal(null));
+  document.getElementById('manage-transactions-list').addEventListener('click', e => {
+    const btn = e.target.closest('.edit-property-transaction-btn');
+    if (btn) openPropertyTransactionModal(state.propertyTransactions.find(t => t.id === btn.dataset.id));
+  });
+  document.getElementById('property-transaction-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const payload = { propertyId: state.manageSelectedPropertyId, type: f.get('type'), amount: f.get('amount'), date: f.get('date'), note: f.get('note') };
+    if (state.editingPropertyTransaction) await db.updatePropertyTransaction(state.editingPropertyTransaction, payload);
+    else await db.addPropertyTransaction(payload);
+    closeModal('property-transaction-modal');
+    await refreshAll();
+  });
+  document.getElementById('property-transaction-delete').addEventListener('click', async () => {
+    if (state.editingPropertyTransaction && confirm('Delete this entry?')) {
+      await db.deletePropertyTransaction(state.editingPropertyTransaction);
+      closeModal('property-transaction-modal');
+      await refreshAll();
+    }
   });
 
   // Income tab
@@ -1042,13 +1178,14 @@ function wireEvents() {
     if (addLinkedBtn) openInvestmentModal(null, addLinkedBtn.dataset.propertyId);
   });
   document.getElementById('property-form').addEventListener('input', e => {
-    if (e.target.name === 'annualGrossIncome' || e.target.name === 'annualServiceCharges') updatePropertyNetPreview();
+    if (['annualGrossIncome', 'annualServiceCharges', 'sharePct'].includes(e.target.name)) updatePropertyNetPreview();
   });
   document.getElementById('property-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
     const payload = {
       name: f.get('name'),
+      type: f.get('type'),
       annualGrossIncome: f.get('annualGrossIncome'),
       annualServiceCharges: f.get('annualServiceCharges'),
       sharePct: f.get('sharePct'),
