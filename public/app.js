@@ -272,7 +272,8 @@ function propertyMonthly(property) {
 function totalMonthlyIncome() {
   const sources = state.incomeSources.reduce((s, i) => s + sourceMonthly(i), 0);
   const properties = state.properties.reduce((s, p) => s + propertyMonthly(p), 0);
-  return sources + properties;
+  const investmentReturns = state.investments.reduce((s, i) => s + investmentReturnMonthly(i), 0);
+  return sources + properties + investmentReturns;
 }
 
 function totalMonthlyBudgeted() {
@@ -320,6 +321,14 @@ function investmentSharePct(investment) {
 // in net worth totals and charts.
 function investmentNetValue(investment) {
   return (investment.value || 0) * (investmentSharePct(investment) / 100);
+}
+
+// Optional income the investment itself throws off - dividends, interest,
+// and the like - separate from `value`, which is what it's worth, not what
+// it pays. Counts toward total income the same way rental income does, and
+// (like value) is scaled by ownership share.
+function investmentReturnMonthly(investment) {
+  return ((investment.annualReturn || 0) * (investmentSharePct(investment) / 100)) / 12;
 }
 
 function investmentsTotal() {
@@ -410,6 +419,18 @@ function renderOverview() {
   document.getElementById('overview-month-label').textContent = sheet ? sheet.name : '';
   document.getElementById('overview-remaining').textContent = formatMoney(remaining);
   document.getElementById('overview-remaining').classList.toggle('negative', remaining < 0);
+
+  // Income vs Expenses: a different question from the budget gauge below it
+  // (which tracks spend against what you allocated) - this tracks whether
+  // you're actually living within your means at all, allocated or not.
+  const savings = monthlyIncome - spent;
+  const savingsRate = monthlyIncome > 0 ? Math.round((savings / monthlyIncome) * 100) : null;
+  document.getElementById('overview-savings-total').textContent = formatMoney(Math.abs(savings));
+  document.getElementById('overview-savings-total').classList.toggle('negative', savings < 0);
+  document.getElementById('overview-savings-label').textContent = savings >= 0 ? 'saved this month' : 'overspent this month';
+  document.getElementById('overview-savings-income').textContent = formatMoney(monthlyIncome);
+  document.getElementById('overview-savings-expenses').textContent = formatMoney(spent);
+  document.getElementById('overview-savings-rate').textContent = savingsRate === null ? '—' : `${savingsRate}%`;
 
   const pct = budgeted > 0 ? Math.min(1, spent / budgeted) : 0;
   const gauge = document.getElementById('overview-gauge-fill');
@@ -607,12 +628,17 @@ function renderNetWorth() {
       const sub = sharePct < 100
         ? `${escapeHtml(i.category)} · ${formatMoney(i.value)} × ${sharePct}% share`
         : escapeHtml(i.category);
+      const returnMonthly = investmentReturnMonthly(i);
+      const returnLine = returnMonthly > 0
+        ? `<div class="item-card-sub">+ ${formatMoney(returnMonthly)} / month return (dividends/interest)</div>`
+        : '';
       return `
       <div class="item-card" data-investment-id="${i.id}">
         <div class="item-card-head">
           <button type="button" class="entry-info edit-investment-btn" data-id="${i.id}">
             <h3>${escapeHtml(investmentDisplayName(i))}${i.propertyId ? '<span class="tag share">🔗 linked</span>' : ''}</h3>
             <div class="item-card-sub">${sub}</div>
+            ${returnLine}
           </button>
         </div>
         <div class="item-card-value">${formatMoney(investmentNetValue(i))}</div>
@@ -832,7 +858,8 @@ function queueSharePush() {
 
     const incomeBreakdown = [
       ...state.incomeSources.map(s => ({ name: s.name, monthly: sourceMonthly(s) })),
-      ...state.properties.map(p => ({ name: p.name, monthly: propertyMonthly(p) }))
+      ...state.properties.map(p => ({ name: p.name, monthly: propertyMonthly(p) })),
+      ...state.investments.filter(i => i.annualReturn > 0).map(i => ({ name: investmentDisplayName(i), monthly: investmentReturnMonthly(i) }))
     ];
 
     const snapshot = {
@@ -1162,6 +1189,7 @@ function openInvestmentModal(investment, prefillPropertyId) {
     form.name.value = investmentDisplayName(investment);
     form.value.value = investment.value;
     form.sharePct.value = investment.sharePct ?? 100;
+    form.annualReturn.value = investment.annualReturn || 0;
   } else if (prefillPropertyId) {
     form.category.value = 'Real Estate';
     form.propertyId.value = prefillPropertyId;
@@ -1355,7 +1383,7 @@ function wireEvents() {
   document.getElementById('investment-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const payload = { name: f.get('name'), category: f.get('category'), value: f.get('value'), propertyId: f.get('propertyId') || null, sharePct: f.get('sharePct') };
+    const payload = { name: f.get('name'), category: f.get('category'), value: f.get('value'), propertyId: f.get('propertyId') || null, sharePct: f.get('sharePct'), annualReturn: f.get('annualReturn') };
     if (state.editingInvestment) await db.updateInvestment(state.editingInvestment, payload);
     else await db.addInvestment(payload);
     closeModal('investment-modal');

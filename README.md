@@ -43,7 +43,13 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
     with a pie chart of asset composition. Every investment has an
     ownership share, same as a property in Income: enter its full value
     and how much of it is actually yours (100% by default), and net worth
-    counts only your share. A Real Estate investment can link to an
+    counts only your share. An investment can also have an annual return
+    (dividends, interest, and the like) — if it pays you something, that
+    return counts toward your income on Overview, the same way rental
+    income from an apartment does, split by your ownership share like
+    everything else. Leave it at 0 for anything that's just sitting there
+    (a car, gold, a stock you're not drawing income from). A Real Estate
+    investment can link to an
     apartment already tracked in Income — its name and ownership share
     then always follow that apartment's own name and share, and each
     property in Income shows its linked net-worth value (or a one-tap
@@ -85,8 +91,10 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
     for anything that isn't really an expense. Re-importing an overlapping
     statement period is safe: anything matching an existing expense (same
     date, amount, and description) is skipped rather than duplicated.
-- **Overview** — total monthly and yearly income, a budget-remaining gauge
-  for the active sheet, and every category's spend-vs-budget in one place.
+- **Overview** — total monthly and yearly income, an **Income vs Expenses**
+  card showing at a glance whether you're saving or overspending this month
+  (with the actual amount, and a savings rate), a budget-remaining gauge for
+  the active sheet, and every category's spend-vs-budget in one place.
 - **Share** — turn on a live, read-only link. It needs a server, and there's
   a free one included: `npm run api:setup && npm run api:deploy` puts a
   Cloudflare Worker and a D1 database on your own Cloudflare account, which

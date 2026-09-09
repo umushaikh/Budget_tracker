@@ -146,6 +146,7 @@ function migratePropertyIncomeFields(store) {
 function migrateInvestmentSharePct(store) {
   store.investments.forEach(i => {
     if (i.sharePct === undefined) i.sharePct = 100;
+    if (i.annualReturn === undefined) i.annualReturn = 0;
   });
 }
 
@@ -370,8 +371,11 @@ const db = {
   // it is actually yours (100 by default). For one linked to an apartment,
   // sharePct is ignored here and always read live from that apartment's own
   // share in Income instead (see investmentSharePct in app.js) - the same
-  // pattern as its name, so the two can never drift apart.
-  async addInvestment({ name, category, value, propertyId, sharePct }) {
+  // pattern as its name, so the two can never drift apart. `annualReturn` is
+  // optional income the investment itself throws off (dividends, interest,
+  // and the like) - separate from `value`, which is a net-worth figure, not
+  // income - and counts toward total income the same way rental income does.
+  async addInvestment({ name, category, value, propertyId, sharePct, annualReturn }) {
     const store = loadDb();
     const investment = {
       id: uid(),
@@ -379,14 +383,15 @@ const db = {
       category: store.investmentCategories.includes(category) ? category : 'Other',
       value: Number(value) || 0,
       propertyId: propertyId || null,
-      sharePct: clampSharePct(sharePct)
+      sharePct: clampSharePct(sharePct),
+      annualReturn: Number(annualReturn) || 0
     };
     store.investments.push(investment);
     saveDb(store);
     return investment;
   },
 
-  async updateInvestment(id, { name, category, value, propertyId, sharePct }) {
+  async updateInvestment(id, { name, category, value, propertyId, sharePct, annualReturn }) {
     const store = loadDb();
     const investment = store.investments.find(i => i.id === id);
     if (!investment) return null;
@@ -395,6 +400,7 @@ const db = {
     investment.value = Number(value) || 0;
     investment.propertyId = propertyId || null;
     investment.sharePct = clampSharePct(sharePct);
+    investment.annualReturn = Number(annualReturn) || 0;
     saveDb(store);
     return investment;
   },
