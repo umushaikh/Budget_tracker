@@ -307,7 +307,10 @@
     <form id="property-form">
       <label class="field">Name<input name="name" type="text" placeholder="e.g. Marina Tower 1204" required /></label>
       <label class="field">Type
-        <select name="type" id="property-type-select"></select>
+        <div class="select-with-btn">
+          <select name="type" id="property-type-select"></select>
+          <button type="button" id="add-property-type-btn" class="icon-btn" title="Add a new type">+</button>
+        </div>
       </label>
       <div class="field-row">
         <label class="field">Rent income per year (gross)<input name="annualGrossIncome" type="number" step="any" min="0" required /></label>
@@ -387,6 +390,20 @@
       </label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="investment-delete" class="danger-btn full hidden">Delete</button>
+    </form>
+  </div>
+</div>
+
+<!-- New property type -->
+<div id="property-type-modal" class="modal hidden" data-close-modal="property-type-modal">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <h3>Add type</h3>
+      <button class="icon-btn" data-close-modal="property-type-modal">✕</button>
+    </div>
+    <form id="property-type-form">
+      <label class="field">Name<input name="name" type="text" placeholder="e.g. Duplex, Chalet" required /></label>
+      <button type="submit" class="primary-btn full">Add</button>
     </form>
   </div>
 </div>

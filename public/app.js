@@ -9,6 +9,7 @@ const state = {
   settings: null,
   incomeSources: [],
   properties: [],
+  propertyTypes: [],
   categories: [],
   sheets: [],
   activeSheetId: null,
@@ -903,7 +904,7 @@ function render() {
   document.getElementById('investment-property-select').innerHTML = `<option value="">Not linked</option>` +
     state.properties.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   document.getElementById('property-type-select').innerHTML = `<option value="">Not specified</option>` +
-    PROPERTY_TYPES.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    state.propertyTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
 
   queueSharePush();
 }
@@ -1333,6 +1334,7 @@ async function refreshAll() {
   state.settings = all.settings;
   state.incomeSources = all.incomeSources;
   state.properties = all.properties;
+  state.propertyTypes = all.propertyTypes;
   state.categories = all.categories;
   state.sheets = all.sheets;
   state.activeSheetId = all.activeSheetId;
@@ -1455,6 +1457,20 @@ function wireEvents() {
       closeModal('property-modal');
       await refreshAll();
     }
+  });
+  document.getElementById('add-property-type-btn').addEventListener('click', () => {
+    document.getElementById('property-type-form').reset();
+    openModal('property-type-modal');
+  });
+  document.getElementById('property-type-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const type = await db.addPropertyType(f.get('name'));
+    await refreshAll();
+    // The apartment editor is still open underneath - select the type that
+    // was just added rather than leaving whatever was picked before.
+    document.getElementById('property-form').type.value = type;
+    closeModal('property-type-modal');
   });
 
   // Net Worth tab

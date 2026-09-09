@@ -17,7 +17,8 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
   Foods/Recipes in the family's calorie counter):
   - **Income** — add salary or any other regular income (monthly or yearly),
     plus every apartment you earn rent from, with its type (Studio, 1/2/3/4+
-    Bedroom, Villa, Townhouse, Penthouse, Office). Properties are entered as
+    Bedroom, Villa, Townhouse, Penthouse, Office, or add your own from the
+    + button next to the type picker). Properties are entered as
     gross rent per year and service charges per year — the app subtracts
     them for you, live, and shows the net figure as you type — then split
     by however much of the apartment you own (100% by default, less if you

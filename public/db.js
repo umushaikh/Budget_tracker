@@ -85,6 +85,7 @@ function seedStore() {
     incomeSources: [],
     properties: [],
     propertyTransactions: [],
+    propertyTypes: [...PROPERTY_TYPES],
     categories: DEFAULT_CATEGORIES.map(name => ({ id: uid(), name, monthlyBudget: 0 })),
     sheets: [{ id: key, name: monthLabel(key), createdAt: Date.now() }],
     activeSheetId: key,
@@ -170,6 +171,7 @@ function loadDb() {
       if (!parsed.incomeSources) parsed.incomeSources = [];
       if (!parsed.properties) parsed.properties = [];
       if (!parsed.propertyTransactions) parsed.propertyTransactions = [];
+      if (!parsed.propertyTypes) parsed.propertyTypes = [...PROPERTY_TYPES];
       if (!parsed.categories) parsed.categories = [];
       if (!parsed.sheets) parsed.sheets = [];
       if (!parsed.expenses) parsed.expenses = [];
@@ -253,12 +255,29 @@ const db = {
     return loadDb().properties;
   },
 
+  async getPropertyTypes() {
+    return loadDb().propertyTypes;
+  },
+
+  // Adds a type if it's new (case-insensitively), or just returns the
+  // existing one it matches - same pattern as addInvestmentCategory.
+  async addPropertyType(name) {
+    const store = loadDb();
+    const clean = (name || '').trim();
+    if (!clean) throw new Error('Type name cannot be empty.');
+    const existing = store.propertyTypes.find(t => t.toLowerCase() === clean.toLowerCase());
+    if (existing) return existing;
+    store.propertyTypes.push(clean);
+    saveDb(store);
+    return clean;
+  },
+
   async addProperty({ name, type, annualGrossIncome, annualServiceCharges, sharePct, vacant }) {
     const store = loadDb();
     const property = {
       id: uid(),
       name: (name || '').trim() || 'Apartment',
-      type: PROPERTY_TYPES.includes(type) ? type : '',
+      type: store.propertyTypes.includes(type) ? type : '',
       annualGrossIncome: Number(annualGrossIncome) || 0,
       annualServiceCharges: Number(annualServiceCharges) || 0,
       sharePct: clampSharePct(sharePct),
@@ -274,7 +293,7 @@ const db = {
     const property = store.properties.find(p => p.id === id);
     if (!property) return null;
     property.name = (name || '').trim() || 'Apartment';
-    property.type = PROPERTY_TYPES.includes(type) ? type : '';
+    property.type = store.propertyTypes.includes(type) ? type : '';
     property.annualGrossIncome = Number(annualGrossIncome) || 0;
     property.annualServiceCharges = Number(annualServiceCharges) || 0;
     property.sharePct = clampSharePct(sharePct);
@@ -764,6 +783,7 @@ const db = {
       incomeSources: store.incomeSources,
       properties: store.properties,
       propertyTransactions: store.propertyTransactions,
+      propertyTypes: store.propertyTypes,
       categories: store.categories,
       sheets: store.sheets,
       activeSheetId: store.activeSheetId,
@@ -781,7 +801,7 @@ const db = {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('That file is not a Budget Tracker backup.');
     }
-    const { incomeSources, properties, propertyTransactions, categories, expenses, investments, investmentCategories, cashAccounts, receivables, payables, importRules } = payload;
+    const { incomeSources, properties, propertyTransactions, propertyTypes, categories, expenses, investments, investmentCategories, cashAccounts, receivables, payables, importRules } = payload;
     if (!Array.isArray(categories) || !Array.isArray(expenses)) {
       throw new Error('That file is missing budget data, so it is not a Budget Tracker backup.');
     }
@@ -789,6 +809,13 @@ const db = {
     store.incomeSources = Array.isArray(incomeSources) ? incomeSources : [];
     store.properties = Array.isArray(properties) ? properties : [];
     store.propertyTransactions = Array.isArray(propertyTransactions) ? propertyTransactions : [];
+    // A backup from before custom property types existed has no
+    // propertyTypes of its own - fall back to the defaults plus whatever
+    // types its properties actually use, so nothing imports into a type the
+    // picker doesn't know about.
+    store.propertyTypes = Array.isArray(propertyTypes) && propertyTypes.length
+      ? propertyTypes
+      : [...new Set([...PROPERTY_TYPES, ...store.properties.map(p => p.type).filter(Boolean)])];
     store.categories = categories;
     store.expenses = expenses;
     store.investments = Array.isArray(investments) ? investments : [];
