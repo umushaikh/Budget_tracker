@@ -307,6 +307,7 @@ body {
 .entry-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .entry-amount { font-weight: 700; font-size: 15px; flex-shrink: 0; }
 
+.entry-num { color: var(--text-dim); font-size: 12.5px; font-weight: 600; flex-shrink: 0; min-width: 1.4em; text-align: right; }
 .entry-row.selectable { gap: 12px; }
 .expense-select-cb { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
 .reward-tag { color: var(--accent); font-weight: 700; }

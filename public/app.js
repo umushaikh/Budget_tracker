@@ -821,8 +821,9 @@ function renderExpenses() {
 
   const list = document.getElementById('expenses-list');
   list.innerHTML = filtered.length
-    ? filtered.map(e => `
+    ? filtered.map((e, idx) => `
       <div class="entry-row${state.expenseSelectMode ? ' selectable' : ''}">
+        <span class="entry-num">${idx + 1}</span>
         ${state.expenseSelectMode
           ? `<input type="checkbox" class="expense-select-cb" data-id="${e.id}" ${state.selectedExpenseIds.has(e.id) ? 'checked' : ''} />`
           : ''}
