@@ -301,6 +301,20 @@ function formatMoney(amount) {
   return `${symbol} ${display}`;
 }
 
+// The budget gauge's center number sits inside a fixed-size circle, so a
+// large balance (a big deficit, or just a healthy income) can render wider
+// than the ring itself instead of wrapping - shrinking the font step by
+// step until it actually fits is the only way to keep it legible at any
+// number of digits, since the ring's diameter can't grow with the text.
+function fitTextToWidth(el, maxWidth, maxFontPx = 34, minFontPx = 15) {
+  el.style.fontSize = `${maxFontPx}px`;
+  let size = maxFontPx;
+  while (el.scrollWidth > maxWidth && size > minFontPx) {
+    size -= 1;
+    el.style.fontSize = `${size}px`;
+  }
+}
+
 function applyTheme(theme) {
   const root = document.documentElement;
   if (theme === 'dark' || theme === 'light') {
@@ -476,8 +490,10 @@ function renderOverview() {
   document.getElementById('overview-budgeted-total').textContent = formatMoney(budgeted);
   document.getElementById('overview-spent-total').textContent = formatMoney(spent);
   document.getElementById('overview-month-label').textContent = sheet ? sheet.name : '';
-  document.getElementById('overview-remaining').textContent = formatMoney(remaining);
-  document.getElementById('overview-remaining').classList.toggle('negative', remaining < 0);
+  const remainingEl = document.getElementById('overview-remaining');
+  remainingEl.textContent = formatMoney(remaining);
+  remainingEl.classList.toggle('negative', remaining < 0);
+  fitTextToWidth(remainingEl, 138);
 
   // Income vs Expenses: a different question from the budget gauge below it
   // (which tracks spend against what you allocated) - this tracks whether
