@@ -96,6 +96,12 @@
           </div>
         </div>
 
+        <div class="budget-card" style="text-align:center">
+          <div id="networth-liquid-total" class="budget-remaining">AED 0</div>
+          <div class="budget-remaining-label">liquid net worth</div>
+          <p class="field-hint" style="text-align:center;margin-top:8px">Cash &amp; bank minus what you owe — what you actually have to spend right now. Excludes investments and money owed to you.</p>
+        </div>
+
         <div class="pie-wrap">
           <svg viewBox="0 0 200 200" class="pie-svg"><g id="networth-pie"></g></svg>
           <div class="pie-center">
@@ -186,10 +192,15 @@
 
       <div id="expenses-list" class="list"></div>
       <button type="button" id="add-expense-btn" class="primary-btn full">+ Add expense</button>
-      <label class="secondary-btn full file-label">
+      <label class="secondary-btn full file-label" id="csv-file-label">
         Import bank/card statement (CSV)
         <input id="csv-file-input" type="file" accept=".csv,text/csv" hidden />
       </label>
+      <label class="secondary-btn full file-label">
+        <span id="pdf-file-label-text">Import bank/card statement (PDF)</span>
+        <input id="pdf-file-input" type="file" accept=".pdf,application/pdf" hidden />
+      </label>
+      <p class="field-hint">PDF statements are read entirely on your device too, using a PDF reader library fetched once from a CDN the first time you use this. Layouts vary a lot between banks — check the preview carefully before importing; CSV export is more reliable if a PDF doesn't parse well.</p>
     </section>
 
     <section id="tab-share" class="tab-panel">

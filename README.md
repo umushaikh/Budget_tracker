@@ -49,7 +49,11 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
     property in Income shows its linked net-worth value (or a one-tap
     prompt to add one) right on its card, so the two stay in sync from
     either side. Unlinking never loses data: deleting an apartment freezes
-    its investment's name instead of deleting the investment too.
+    its investment's name instead of deleting the investment too. A second
+    card shows **liquid net worth** — cash & bank minus what you owe, i.e.
+    what you actually have to spend right now — separately from the full
+    total, since real estate, a business, or stocks aren't money you can
+    spend today the way a bank balance is.
 - **Budgets** — split your monthly income into categories (Groceries,
   Rent, Utilities, ... or your own), each with its own monthly budget.
   A progress bar on every category tracks what you've actually spent
@@ -61,15 +65,26 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
   month happened to be on screen when you added it (so back-filling a past
   month's spending just works). A pie chart and per-category legend show
   the current month's spending at a glance; chips filter the list down to
-  one category at a time. **Import bank/card statement (CSV)** bulk-adds
-  expenses from an exported statement instead of typing each one in: pick
-  which column is the date/amount/description once (remembered next time
-  you import that bank's format), then categorize each merchant that
-  appears — optionally "remember" it so future imports with that merchant
-  auto-categorize themselves. Re-importing an overlapping statement period
-  is safe: anything matching an existing expense (same date, amount, and
-  description) is skipped rather than duplicated. The file is parsed
-  entirely in the browser and never leaves the device.
+  one category at a time. **Import bank/card statement (CSV or PDF)**
+  bulk-adds expenses from an exported statement instead of typing each one
+  in.
+  - **CSV**: pick which column is the date/amount/description once
+    (remembered next time you import that bank's format), and whether
+    spending shows as negative or positive numbers.
+  - **PDF**: a PDF reader library ([pdf.js](https://mozilla.github.io/pdf.js/),
+    fetched from a CDN the first time you use this — the statement itself
+    is still never uploaded anywhere) extracts the text and looks for
+    lines that read as "date ... amount". Bank PDF layouts vary a lot, so
+    treat this as best-effort — it can't reliably tell a purchase from a
+    salary deposit or refund the way a CSV's sign column can, which is
+    what the "Include in import" checkbox on every merchant is for. CSV
+    export is more reliable if a PDF doesn't parse well.
+  - Either way, the next step is the same: categorize each merchant that
+    appears — optionally "remember" it so future imports with that
+    merchant auto-categorize themselves — and uncheck "Include in import"
+    for anything that isn't really an expense. Re-importing an overlapping
+    statement period is safe: anything matching an existing expense (same
+    date, amount, and description) is skipped rather than duplicated.
 - **Overview** — total monthly and yearly income, a budget-remaining gauge
   for the active sheet, and every category's spend-vs-budget in one place.
 - **Share** — turn on a live, read-only link. It needs a server, and there's

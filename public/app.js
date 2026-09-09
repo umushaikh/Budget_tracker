@@ -130,6 +130,109 @@ function parseCsvAmount(raw) {
   return isParenNegative ? -Math.abs(n) : n;
 }
 
+// ---- PDF statement import ----
+// pdf.js is fetched from a CDN on first use rather than bundled, since most
+// people importing a statement will use the CSV path most of the time and
+// this library is a few hundred KB the app would otherwise carry (and try
+// to cache offline) for everyone, always. The PDF's own contents never
+// leave the device either way - only the library code itself comes from
+// the CDN, same as loading a web font.
+const PDFJS_VERSION = '3.11.174';
+const PDFJS_BASE = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}`;
+let pdfJsLoadPromise = null;
+
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (pdfJsLoadPromise) return pdfJsLoadPromise;
+  pdfJsLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `${PDFJS_BASE}/pdf.min.js`;
+    script.onload = () => {
+      if (!window.pdfjsLib) { reject(new Error('The PDF reader loaded but did not initialize.')); return; }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/pdf.worker.min.js`;
+      resolve(window.pdfjsLib);
+    };
+    script.onerror = () => reject(new Error('Could not load the PDF reader - this needs an internet connection the first time it is used.'));
+    document.head.appendChild(script);
+  });
+  return pdfJsLoadPromise;
+}
+
+// Reconstructs each page's text into lines. pdf.js hands back text items in
+// an order that does not reliably match reading order for multi-column
+// layouts (a statement's date/description/amount columns, for instance), so
+// items are grouped by y-position into rows first, then sorted left-to-right
+// by x-position within each row.
+async function extractLinesFromPdf(arrayBuffer) {
+  const pdfjsLib = await loadPdfJs();
+  const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const lines = [];
+  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+    const page = await doc.getPage(pageNum);
+    const content = await page.getTextContent();
+    const rows = new Map();
+    content.items.forEach(item => {
+      const y = Math.round(item.transform[5]);
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push(item);
+    });
+    // PDF y-coordinates grow upward, so sort descending for top-to-bottom order.
+    [...rows.keys()].sort((a, b) => b - a).forEach(y => {
+      const line = rows.get(y)
+        .sort((a, b) => a.transform[4] - b.transform[4])
+        .map(i => i.str).join(' ').replace(/\s+/g, ' ').trim();
+      if (line) lines.push(line);
+    });
+  }
+  return lines;
+}
+
+// Best-effort: finds a date and a trailing money amount on each line and
+// treats what's left as the description. This catches common single-column
+// "date ... description ... amount" statement layouts and misses others -
+// bank PDF layouts vary too much to handle generically, which is exactly
+// why every extracted row still goes through the same review-and-categorize
+// preview as a CSV import before anything is actually saved.
+function parseTransactionLines(lines) {
+  const dateRe = /\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/;
+  const amountRe = /(-?\(?\s?[\d,]+\.\d{2}\)?)\s*(?:AED|USD|Dr|Cr|DR|CR)?\s*$/;
+  const rows = [];
+  for (const line of lines) {
+    const dateMatch = line.match(dateRe);
+    const amountMatch = line.match(amountRe);
+    if (!dateMatch || !amountMatch) continue;
+    const date = parseCsvDate(dateMatch[1]);
+    const amount = parseCsvAmount(amountMatch[1]);
+    if (!date || amount === null || amount === 0) continue;
+    const note = (line.slice(0, amountMatch.index) + line.slice(amountMatch.index + amountMatch[0].length))
+      .replace(dateMatch[0], '').replace(/\s{2,}/g, ' ').trim().slice(0, 140);
+    if (!note) continue;
+    rows.push({ date, amount: Math.abs(amount), note });
+  }
+  return rows;
+}
+
+async function handlePdfFileSelected(file) {
+  const labelText = document.getElementById('pdf-file-label-text');
+  const originalText = labelText.textContent;
+  labelText.textContent = 'Reading PDF…';
+  try {
+    const buffer = await file.arrayBuffer();
+    const lines = await extractLinesFromPdf(buffer);
+    const rawRows = parseTransactionLines(lines);
+    if (!rawRows.length) {
+      alert('Could not find any transaction lines in that PDF. It may be a scanned image rather than real text, or a layout this can\'t read yet - a CSV export from your bank is more reliable if this keeps not working.');
+      return;
+    }
+    csvImport = { source: 'pdf' };
+    await buildCandidatesFromRows(rawRows);
+    renderCsvPreviewStep();
+    openModal('csv-import-modal');
+  } finally {
+    labelText.textContent = originalText;
+  }
+}
+
 function formatMoney(amount) {
   const symbol = (state.settings && state.settings.currency) || 'AED';
   const rounded = Math.round((Number(amount) || 0) * 100) / 100;
@@ -241,6 +344,14 @@ function assetsTotal() {
 
 function netWorthTotal() {
   return assetsTotal() - payablesTotal();
+}
+
+// What you could actually spend today: cash and bank balances minus what
+// you owe. Deliberately excludes investments (real estate, stocks, a
+// business, gold - not instantly spendable) and receivables (money owed to
+// you isn't in hand yet), unlike the full net worth total above.
+function liquidNetWorthTotal() {
+  return cashTotal() - payablesTotal();
 }
 
 function categoryName(categoryId) {
@@ -470,6 +581,9 @@ function renderNetWorth() {
   document.getElementById('networth-total').classList.toggle('negative', netWorth < 0);
   document.getElementById('networth-assets-total').textContent = formatMoney(assetsTotal());
   document.getElementById('networth-liabilities-total').textContent = formatMoney(payablesTotal());
+  const liquid = liquidNetWorthTotal();
+  document.getElementById('networth-liquid-total').textContent = formatMoney(liquid);
+  document.getElementById('networth-liquid-total').classList.toggle('negative', liquid < 0);
 
   const segments = [
     ...state.investmentCategories.map(cat => ({
@@ -860,7 +974,7 @@ async function handleCsvFileSelected(file) {
     alert('Could not find any rows in that file. Make sure it\'s a CSV export with a header row.');
     return;
   }
-  csvImport = { rows };
+  csvImport = { source: 'csv', rows };
   await renderCsvMappingStep();
   document.getElementById('csv-step-mapping').classList.remove('hidden');
   document.getElementById('csv-step-preview').classList.add('hidden');
@@ -889,12 +1003,47 @@ async function renderCsvMappingStep() {
   }
 }
 
+// Shared tail of the CSV and PDF import paths: given rows already resolved
+// to {date, amount, note} - amount as a positive "this was spent" magnitude
+// - this applies saved merchant rules, flags anything that already exists
+// (same date+amount+description) so the preview can show it won't be
+// double-counted, and groups by description so the next step asks about
+// each merchant once rather than once per transaction. `include` defaults
+// true; PDF text extraction can't reliably tell a purchase from a salary
+// deposit or refund the way a CSV's sign column can, so the preview's
+// per-merchant checkbox is what actually excludes those before import.
+async function buildCandidatesFromRows(rawRows) {
+  const rules = await db.getImportRules();
+  const matchRule = desc => {
+    const lower = desc.toLowerCase();
+    const rule = rules.find(r => lower.includes(r.keyword));
+    return rule ? rule.categoryId : null;
+  };
+
+  const candidates = rawRows.map(r => ({
+    date: r.date,
+    amount: r.amount,
+    note: r.note,
+    categoryId: matchRule(r.note),
+    duplicate: state.expenses.some(e => e.date === r.date && e.amount === r.amount && e.note === r.note)
+  }));
+
+  const merchants = new Map();
+  candidates.forEach(c => {
+    if (!merchants.has(c.note)) merchants.set(c.note, { note: c.note, count: 0, total: 0, categoryId: c.categoryId, include: true });
+    const m = merchants.get(c.note);
+    m.count++;
+    m.total += c.amount;
+  });
+
+  csvImport.candidates = candidates;
+  csvImport.merchants = [...merchants.values()];
+}
+
 // Turns the mapped columns into candidate expenses: parses each data row,
-// drops rows with no usable date/amount, keeps only the sign that means
-// "spent" (the other sign is a payment or refund, not an expense), and
-// flags anything that already exists (same date+amount+description) so the
-// preview can show it won't be double-counted. Groups by description so the
-// next step asks about each merchant once, not once per transaction.
+// drops rows with no usable date/amount, and keeps only the sign that means
+// "spent" (the other sign is a payment or refund, not an expense) before
+// handing off to buildCandidatesFromRows for the rest.
 async function buildCsvCandidates() {
   const dateCol = Number(document.getElementById('csv-col-date').value);
   const amountCol = Number(document.getElementById('csv-col-amount').value);
@@ -904,14 +1053,7 @@ async function buildCsvCandidates() {
 
   await db.saveCsvMapping({ headerSignature: headers.join('|'), dateCol, amountCol, descCol, negativeIsSpend });
 
-  const rules = await db.getImportRules();
-  const matchRule = desc => {
-    const lower = desc.toLowerCase();
-    const rule = rules.find(r => lower.includes(r.keyword));
-    return rule ? rule.categoryId : null;
-  };
-
-  const candidates = [];
+  const rawRows = [];
   csvImport.rows.slice(1).forEach(row => {
     const date = parseCsvDate(row[dateCol]);
     const rawAmount = parseCsvAmount(row[amountCol]);
@@ -919,21 +1061,9 @@ async function buildCsvCandidates() {
     if (!date || rawAmount === null || !note) return;
     const isSpend = negativeIsSpend ? rawAmount < 0 : rawAmount > 0;
     if (!isSpend) return;
-    const amount = Math.abs(rawAmount);
-    const duplicate = state.expenses.some(e => e.date === date && e.amount === amount && e.note === note);
-    candidates.push({ date, amount, note, categoryId: matchRule(note), duplicate });
+    rawRows.push({ date, amount: Math.abs(rawAmount), note });
   });
-
-  const merchants = new Map();
-  candidates.forEach(c => {
-    if (!merchants.has(c.note)) merchants.set(c.note, { note: c.note, count: 0, total: 0, categoryId: c.categoryId });
-    const m = merchants.get(c.note);
-    m.count++;
-    m.total += c.amount;
-  });
-
-  csvImport.candidates = candidates;
-  csvImport.merchants = [...merchants.values()];
+  await buildCandidatesFromRows(rawRows);
 }
 
 function renderCsvPreviewStep() {
@@ -950,6 +1080,7 @@ function renderCsvPreviewStep() {
 
   document.getElementById('csv-merchant-list').innerHTML = csvImport.merchants.map((m, i) => `
     <div class="item-card">
+      <label class="checkbox-row"><input type="checkbox" class="csv-include" data-idx="${i}" ${m.include ? 'checked' : ''} /> Include in import</label>
       <div class="item-card-sub">${escapeHtml(m.note)} · ${m.count} transaction${m.count > 1 ? 's' : ''} · ${formatMoney(m.total)}</div>
       <select class="csv-merchant-category" data-idx="${i}">${categoryOptions}</select>
       <label class="checkbox-row"><input type="checkbox" class="csv-remember" data-idx="${i}" checked /> Remember this merchant</label>
@@ -960,22 +1091,30 @@ function renderCsvPreviewStep() {
 
   document.getElementById('csv-step-mapping').classList.add('hidden');
   document.getElementById('csv-step-preview').classList.remove('hidden');
+  document.getElementById('csv-back-btn').classList.toggle('hidden', csvImport.source === 'pdf');
 }
 
 async function confirmCsvImport() {
   const categoryByMerchant = new Map();
+  const includeByMerchant = new Map();
   document.querySelectorAll('.csv-merchant-category').forEach(sel => {
     const merchant = csvImport.merchants[Number(sel.dataset.idx)];
     categoryByMerchant.set(merchant.note, sel.value || null);
   });
+  document.querySelectorAll('.csv-include').forEach(cb => {
+    const merchant = csvImport.merchants[Number(cb.dataset.idx)];
+    includeByMerchant.set(merchant.note, cb.checked);
+  });
   for (const cb of document.querySelectorAll('.csv-remember')) {
     const merchant = csvImport.merchants[Number(cb.dataset.idx)];
     const categoryId = categoryByMerchant.get(merchant.note);
-    if (cb.checked && categoryId) await db.addImportRule({ keyword: merchant.note, categoryId });
+    if (cb.checked && categoryId && includeByMerchant.get(merchant.note)) {
+      await db.addImportRule({ keyword: merchant.note, categoryId });
+    }
   }
 
   const rows = csvImport.candidates
-    .filter(c => !c.duplicate)
+    .filter(c => !c.duplicate && includeByMerchant.get(c.note))
     .map(c => ({ ...c, categoryId: categoryByMerchant.get(c.note) }));
 
   const result = await db.importExpenses(rows);
@@ -1384,6 +1523,16 @@ function wireEvents() {
       await handleCsvFileSelected(file);
     } catch (err) {
       alert(err.message || 'Could not read that file.');
+    }
+  });
+  document.getElementById('pdf-file-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      await handlePdfFileSelected(file);
+    } catch (err) {
+      alert(err.message || 'Could not read that PDF.');
     }
   });
   document.getElementById('csv-mapping-next-btn').addEventListener('click', async () => {
