@@ -67,16 +67,19 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
   against it for the currently viewed month.
 - **Expenses** — log expenses against a category with an amount, date, an
   optional note, and any cashback or reward earned on the purchase (shows
-  next to it in the list, with a running total for the month). ‹ › arrows
-  move between calendar months — each one is created automatically the
-  first time you visit or log something in it, and an expense always lands
-  in the month of its own date, not whichever month happened to be on
-  screen when you added it (so back-filling a past month's spending just
-  works). A pie chart and per-category legend show the current month's
-  spending at a glance; chips filter the list down to one category at a
-  time. **Select** turns the list into checkboxes for deleting several
-  expenses at once — handy for undoing a bad import without hand-deleting
-  every row. **Import bank/card statement (CSV or PDF)** bulk-adds expenses
+  next to it in the list, with a running total for the month); a + button
+  next to the category picker adds a new one on the spot without leaving
+  the expense editor. ‹ › arrows move between calendar months — each one is
+  created automatically the first time you visit or log something in it,
+  and an expense always lands in the month of its own date, not whichever
+  month happened to be on screen when you added it (so back-filling a past
+  month's spending just works). A pie chart and per-category legend show
+  the current month's spending at a glance; a search box and chips filter
+  the list by description/category and by category respectively, and both
+  reset when you change months. **Select** turns the list into checkboxes
+  for deleting several expenses at once — handy for undoing a bad import
+  without hand-deleting every row. **Import bank/card statement (CSV or
+  PDF)** bulk-adds expenses
   from an exported statement instead of typing each one in.
   - **CSV**: pick which column is the date/amount/description once
     (remembered next time you import that bank's format), and whether

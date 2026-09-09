@@ -23,6 +23,7 @@ const state = {
   activeTab: 'overview',
   incomeSegment: 'income',
   expenseFilter: 'all',
+  expenseSearch: '',
   expenseSelectMode: false,
   selectedExpenseIds: new Set(),
   manageSelectedPropertyId: null,
@@ -809,9 +810,14 @@ function renderExpenses() {
   const chips = [{ id: 'all', name: 'All' }, ...state.categories, { id: '__uncat', name: 'Uncategorized' }];
   filterRow.innerHTML = chips.map(c => `<button type="button" class="chip${state.expenseFilter === c.id ? ' active' : ''}" data-filter="${c.id}">${escapeHtml(c.name)}</button>`).join('');
 
-  const filtered = state.expenseFilter === 'all'
-    ? all
-    : all.filter(e => (e.categoryId || '__uncat') === state.expenseFilter);
+  const searchInput = document.getElementById('expenses-search-input');
+  if (searchInput.value !== state.expenseSearch) searchInput.value = state.expenseSearch;
+  const searchTerm = state.expenseSearch.trim().toLowerCase();
+  const filtered = all
+    .filter(e => state.expenseFilter === 'all' || (e.categoryId || '__uncat') === state.expenseFilter)
+    .filter(e => !searchTerm
+      || (e.note || '').toLowerCase().includes(searchTerm)
+      || categoryName(e.categoryId).toLowerCase().includes(searchTerm));
 
   const list = document.getElementById('expenses-list');
   list.innerHTML = filtered.length
@@ -826,7 +832,7 @@ function renderExpenses() {
         </button>
         <span class="entry-amount">${formatMoney(e.amount)}</span>
       </div>`).join('')
-    : `<div class="empty-hint">No expenses in this filter.</div>`;
+    : `<div class="empty-hint">${searchTerm ? 'No expenses match your search.' : 'No expenses in this filter.'}</div>`;
 
   document.getElementById('add-expense-btn').classList.toggle('hidden', state.expenseSelectMode);
   document.getElementById('expenses-select-toggle-btn').textContent = state.expenseSelectMode ? 'Cancel' : 'Select';
@@ -1053,6 +1059,8 @@ function openCategoryModal(category) {
   if (category) {
     form.name.value = category.name;
     form.monthlyBudget.value = category.monthlyBudget;
+  } else {
+    form.monthlyBudget.value = 0;
   }
   document.getElementById('category-delete').classList.toggle('hidden', !category);
   openModal('category-modal');
@@ -1583,6 +1591,7 @@ function wireEvents() {
 
   // Budgets tab
   document.getElementById('add-category-btn').addEventListener('click', () => openCategoryModal(null));
+  document.getElementById('add-expense-category-btn').addEventListener('click', () => openCategoryModal(null));
   document.getElementById('budgets-list').addEventListener('click', e => {
     const btn = e.target.closest('.edit-category-btn');
     if (btn) openCategoryModal(state.categories.find(c => c.id === btn.dataset.id));
@@ -1591,10 +1600,18 @@ function wireEvents() {
     e.preventDefault();
     const f = new FormData(e.target);
     const payload = { name: f.get('name'), monthlyBudget: f.get('monthlyBudget') };
-    if (state.editingCategory) await db.updateCategory(state.editingCategory, payload);
-    else await db.addCategory(payload);
+    const isNew = !state.editingCategory;
+    const category = state.editingCategory
+      ? await db.updateCategory(state.editingCategory, payload)
+      : await db.addCategory(payload);
     closeModal('category-modal');
     await refreshAll();
+    // Opened from the expense editor's + button (which is still open
+    // underneath) - select the category that was just added rather than
+    // leaving whatever was picked before.
+    if (isNew && !document.getElementById('expense-modal').classList.contains('hidden')) {
+      document.getElementById('expense-form').categoryId.value = category.id;
+    }
   });
   document.getElementById('category-delete').addEventListener('click', async () => {
     if (state.editingCategory && confirm('Delete this category? Its expenses will become uncategorized.')) {
@@ -1609,6 +1626,7 @@ function wireEvents() {
   const shiftMonth = async delta => {
     await db.shiftActiveSheet(delta);
     state.expenseFilter = 'all';
+    state.expenseSearch = '';
     await refreshAll();
   };
   document.getElementById('overview-month-prev-btn').addEventListener('click', () => shiftMonth(-1));
@@ -1621,6 +1639,10 @@ function wireEvents() {
     const chip = e.target.closest('.chip');
     if (!chip) return;
     state.expenseFilter = chip.dataset.filter;
+    renderExpenses();
+  });
+  document.getElementById('expenses-search-input').addEventListener('input', e => {
+    state.expenseSearch = e.target.value;
     renderExpenses();
   });
   document.getElementById('add-expense-btn').addEventListener('click', () => openExpenseModal(null));

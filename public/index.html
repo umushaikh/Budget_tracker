@@ -200,6 +200,8 @@
       <div id="expenses-legend" class="list"></div>
       <div id="expenses-rewards-total" class="reward-total hidden"></div>
 
+      <input id="expenses-search-input" class="text-input" type="search" placeholder="Search this month's expenses…" />
+
       <div class="section-title-row">
         <div class="section-title">Filter by category</div>
         <button type="button" id="expenses-select-toggle-btn" class="text-btn">Select</button>
@@ -501,7 +503,10 @@
         <label class="field">Date<input name="date" type="date" required /></label>
       </div>
       <label class="field">Category
-        <select name="categoryId" id="expense-category-select"></select>
+        <div class="select-with-btn">
+          <select name="categoryId" id="expense-category-select"></select>
+          <button type="button" id="add-expense-category-btn" class="icon-btn" title="Add a new category">+</button>
+        </div>
       </label>
       <label class="field">Note (optional)<input name="note" type="text" maxlength="140" placeholder="What was this for?" /></label>
       <label class="field">Cashback / reward earned (optional)<input name="reward" type="number" step="any" min="0" value="0" /></label>
