@@ -23,6 +23,25 @@
   --r-lg: 24px;
   --r-md: 16px;
   --r-pill: 999px;
+
+  /* The single-column width the whole app (topbar, content, tab bar) is
+     capped to and centered within. Phone stays exactly as it always was -
+     any viewport under the breakpoint below never sees this change, since
+     it's already narrower than even the phone value. */
+  --app-width: 560px;
+}
+
+/* Gated on more than just width: a large phone in landscape can exceed
+   900px too, and this must never change the phone experience regardless of
+   orientation. pointer:fine + hover:hover are only ever true on a real
+   mouse/trackpad, never a touchscreen, so this only fires on an actual
+   desktop/laptop window - same single-column layout, just roomier: bigger
+   cards, less cramped text, a less tiny-looking gauge, without turning into
+   a multi-column dashboard or changing the bottom tab bar navigation. */
+@media (min-width: 900px) and (pointer: fine) and (hover: hover) {
+  :root {
+    --app-width: 900px;
+  }
 }
 
 @media (prefers-color-scheme: light) {
@@ -89,7 +108,7 @@ body {
   justify-content: space-between;
   padding: calc(14px + env(safe-area-inset-top, 0px)) 18px 12px;
   background: var(--bg);
-  max-width: 560px;
+  max-width: var(--app-width);
   width: 100%;
   margin: 0 auto;
   box-sizing: border-box;
@@ -99,10 +118,10 @@ body {
 .banner {
   /* Same 16px-from-edge gutter as before on a phone-width screen (where
      100% - 32px is the binding constraint), but capped so the box lines up
-     with .content's own inner edges (560px - 16px padding each side) once
-     the viewport is wide enough for max-width to bind instead. */
+     with .content's own inner edges (--app-width minus 16px padding each
+     side) once the viewport is wide enough for max-width to bind instead. */
   width: calc(100% - 32px);
-  max-width: 528px;
+  max-width: calc(var(--app-width) - 32px);
   margin: 0 auto 10px;
   background: var(--accent-soft);
   color: var(--accent);
@@ -115,7 +134,7 @@ body {
 .content {
   flex: 1;
   padding: 4px 16px 120px;
-  max-width: 560px;
+  max-width: var(--app-width);
   width: 100%;
   margin: 0 auto;
 }
@@ -133,11 +152,11 @@ body {
   left: 14px;
   right: 14px;
   /* On a phone-width screen this stays exactly "14px from each edge" as
-     before (the gap is already narrower than 560px, so max-width never
-     binds). Once the viewport is wide enough for max-width to bind, the
-     auto margins re-center the bar under the app's own 560px column
-     instead of leaving it stretched edge to edge on a desktop window. */
-  max-width: 560px;
+     before (the gap is already narrower than --app-width, so max-width
+     never binds). Once the viewport is wide enough for max-width to bind,
+     the auto margins re-center the bar under the app's own column instead
+     of leaving it stretched edge to edge on a desktop window. */
+  max-width: var(--app-width);
   margin-left: auto;
   margin-right: auto;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -505,6 +524,8 @@ body {
 .modal-sheet {
   background: var(--card);
   width: 100%;
+  /* Deliberately fixed, not --app-width: a form with a couple of fields
+     doesn't get more useful at 900px wide, just emptier-looking. */
   max-width: 560px;
   max-height: 100%;
   display: flex;
