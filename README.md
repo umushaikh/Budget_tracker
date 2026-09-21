@@ -135,19 +135,30 @@ address on your phone (same WiFi). Over plain HTTP, browsers disable offline
 mode and home-screen install — for the full installable app, serve it over
 HTTPS instead (see below).
 
-## Installing it on your phone
+## Installing it on your phone (or desktop)
 
-This is a Progressive Web App: no app store needed.
+This is a Progressive Web App: no app store needed, and the same install
+works on a computer as it does on a phone.
 
 1. Deploy `public/` somewhere served over HTTPS. The included GitHub Actions
    workflow (`.github/workflows/deploy-pages.yml`) publishes it to GitHub
    Pages automatically on every push — enable Pages for this repo once
    (Settings → Pages → Source: GitHub Actions) and it takes care of the rest.
-2. Open the HTTPS URL on your phone.
-3. iOS Safari: Share → Add to Home Screen. Android Chrome: menu → Install app
-   (or "Add to Home Screen").
+2. Open the HTTPS URL wherever you want it.
+   - **iOS Safari**: Share → Add to Home Screen.
+   - **Android Chrome**: menu → Install app (or "Add to Home Screen").
+   - **Desktop Chrome/Edge**: click the install icon in the address bar (or
+     menu → "Install Budget Tracker…"). It opens in its own window, pinned
+     to your dock/taskbar/Applications like any other app.
 
-It then runs full-screen like a native app and works offline.
+It then runs full-screen like a native app and works offline, syncing
+nothing between devices on its own — each install has its own local data,
+same as the phone and desktop copies of any other browser-only app. Data
+only ever moves between them if you export a backup from one (gear icon →
+Backup) and import it into the other, or turn on Share (below) for a
+read-only live view. The layout centers itself in a phone-width column on a
+wide window rather than stretching edge to edge, matching the rest of this
+family of apps.
 
 ## Sharing a live view with someone
 
