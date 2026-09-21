@@ -229,40 +229,100 @@
     </section>
 
     <section id="tab-share" class="tab-panel">
-      <h2 class="panel-title">Share</h2>
+      <h2 class="panel-title">Share &amp; Sync</h2>
 
-      <div id="share-setup">
-        <p class="panel-lede">Get a link that shows your income, budgets, and expenses updating live — no account or app install needed on their end, and nothing they open can be edited. Good for sharing with your wife.</p>
-        <label class="field">Share server address
-          <input id="share-server" class="text-input" type="url" inputmode="url"
-                 autocapitalize="off" autocorrect="off" spellcheck="false"
-                 placeholder="https://....workers.dev" />
-          <p class="field-hint">The address printed by <code>npm run api:deploy</code> once you deploy the included server to your own free Cloudflare account. See <code>api/README.md</code>.</p>
-        </label>
-        <button type="button" id="share-enable-btn" class="primary-btn full">Turn on live sharing</button>
-        <div id="share-setup-status" class="entry-sub"></div>
+      <div class="segmented">
+        <button type="button" class="seg-btn active" data-segment="share" id="seg-share-btn">Share</button>
+        <button type="button" class="seg-btn" data-segment="sync" id="seg-sync-btn">Sync devices</button>
       </div>
 
-      <div id="share-board" class="hidden">
-        <label class="toggle-row">
-          <span>
-            <span class="toggle-row-title">Live sharing</span>
-            <span class="toggle-row-sub">While on, every change here pushes an updated snapshot to the link below.</span>
-          </span>
-          <span class="toggle-switch">
-            <input type="checkbox" id="share-enabled-toggle" />
-            <span class="toggle-track"></span>
-          </span>
-        </label>
-
-        <div class="share-link-card">
-          <div class="share-link-label">Viewer link — send this to your wife</div>
-          <div id="share-link-value" class="share-link-value"></div>
-          <button type="button" id="share-copy-btn" class="secondary-btn full">Copy link</button>
-          <div id="share-sync-state" class="share-sync-state"></div>
+      <div id="share-panel-section">
+        <div id="share-setup">
+          <p class="panel-lede">Get a link that shows your income, budgets, and expenses updating live — no account or app install needed on their end, and nothing they open can be edited. Good for sharing with your wife.</p>
+          <label class="field">Share server address
+            <input id="share-server" class="text-input" type="url" inputmode="url"
+                   autocapitalize="off" autocorrect="off" spellcheck="false"
+                   placeholder="https://....workers.dev" />
+            <p class="field-hint">The address printed by <code>npm run api:deploy</code> once you deploy the included server to your own free Cloudflare account. See <code>api/README.md</code>.</p>
+          </label>
+          <button type="button" id="share-enable-btn" class="primary-btn full">Turn on live sharing</button>
+          <div id="share-setup-status" class="entry-sub"></div>
         </div>
 
-        <button type="button" id="share-disable-btn" class="danger-btn full">Turn off sharing &amp; revoke link</button>
+        <div id="share-board" class="hidden">
+          <label class="toggle-row">
+            <span>
+              <span class="toggle-row-title">Live sharing</span>
+              <span class="toggle-row-sub">While on, every change here pushes an updated snapshot to the link below.</span>
+            </span>
+            <span class="toggle-switch">
+              <input type="checkbox" id="share-enabled-toggle" />
+              <span class="toggle-track"></span>
+            </span>
+          </label>
+
+          <div class="share-link-card">
+            <div class="share-link-label">Viewer link — send this to your wife</div>
+            <div id="share-link-value" class="share-link-value"></div>
+            <button type="button" id="share-copy-btn" class="secondary-btn full">Copy link</button>
+            <div id="share-sync-state" class="share-sync-state"></div>
+          </div>
+
+          <button type="button" id="share-disable-btn" class="danger-btn full">Turn off sharing &amp; revoke link</button>
+        </div>
+      </div>
+
+      <div id="sync-panel-section" class="hidden">
+        <div id="sync-setup">
+          <p class="panel-lede">Keep this same budget updating live on more than one device of yours — your phone and your desktop, say. Unlike Share above, this is two-way (either device can edit) and includes everything, including Net Worth.</p>
+          <p class="field-hint">Whichever device saves last wins if you edit the same thing on both before they've synced — there's no merge, so treat this as one budget kept in step, not two independent copies. Uses the same server as Share; see <code>api/README.md</code>.</p>
+
+          <div class="section-title">Start syncing from this device</div>
+          <label class="field">Server address
+            <input id="sync-server" class="text-input" type="url" inputmode="url"
+                   autocapitalize="off" autocorrect="off" spellcheck="false"
+                   placeholder="https://....workers.dev" />
+          </label>
+          <button type="button" id="sync-start-btn" class="primary-btn full">Start syncing on this device</button>
+
+          <div class="section-title">Or join a sync already started</div>
+          <label class="field">Server address
+            <input id="sync-join-server" class="text-input" type="url" inputmode="url"
+                   autocapitalize="off" autocorrect="off" spellcheck="false"
+                   placeholder="https://....workers.dev" />
+          </label>
+          <label class="field">Sync code (from your other device)
+            <input id="sync-join-code" class="text-input" type="text"
+                   autocapitalize="off" autocorrect="off" spellcheck="false"
+                   placeholder="Paste the code shown there" />
+          </label>
+          <p class="field-hint">This replaces this device's local data with whatever the other device has synced. Back up first (gear icon → Backup) if this device already has data you don't want to lose.</p>
+          <button type="button" id="sync-join-btn" class="secondary-btn full">Link this device</button>
+          <div id="sync-setup-status" class="entry-sub"></div>
+        </div>
+
+        <div id="sync-board" class="hidden">
+          <label class="toggle-row">
+            <span>
+              <span class="toggle-row-title">Sync</span>
+              <span class="toggle-row-sub">While on, changes here push to the sync and pull in changes made elsewhere automatically.</span>
+            </span>
+            <span class="toggle-switch">
+              <input type="checkbox" id="sync-enabled-toggle" />
+              <span class="toggle-track"></span>
+            </span>
+          </label>
+
+          <div class="share-link-card">
+            <div class="share-link-label">Sync code — enter this on another device to link it too</div>
+            <div id="sync-code-value" class="share-link-value"></div>
+            <button type="button" id="sync-copy-btn" class="secondary-btn full">Copy code</button>
+            <p class="field-hint">Unlike the Share link above, this code alone grants full read/write access to everything, including Net Worth — treat it like a password, not something to forward around.</p>
+            <div id="sync-sync-state" class="share-sync-state"></div>
+          </div>
+
+          <button type="button" id="sync-disable-btn" class="danger-btn full">Unlink this device</button>
+        </div>
       </div>
     </section>
 
@@ -589,6 +649,7 @@
 
 <script src="db.js"></script>
 <script src="share.js"></script>
+<script src="sync.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

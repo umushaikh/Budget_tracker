@@ -1,14 +1,22 @@
-# Share server
+# Share & sync server
 
-A tiny Cloudflare Worker plus a D1 database. It holds one row per share link
-— the label and the latest computed snapshot (income, budgets, expenses) —
-overwritten in place every time the app pushes an update, so the database
-stays one row per link no matter how often you edit your budget.
+A tiny Cloudflare Worker plus a D1 database, serving two features off the
+same deployment:
 
-Unlike the friend-group servers in the other apps in this family, this one
-has exactly one writer (your own app, authenticated with a token) and any
-number of anonymous readers (whoever has the link). There's no join code to
-type on the viewer's end — just open the link.
+- **Share** — one row per share link (the label and the latest computed
+  snapshot: income, budgets, expenses), overwritten in place every time the
+  app pushes an update. Exactly one writer (your own app, authenticated with
+  a token) and any number of anonymous readers (whoever has the link) —
+  there's no join code to type on the viewer's end, just open the link.
+- **Sync** — one row per sync link, holding the full editable dataset
+  (including Net Worth) instead of a read-only snapshot. Two-way: any device
+  holding the same code+secret can both read and write it, for keeping the
+  same budget updating live across your own phone and desktop. See "How
+  access works" below for how this differs from Share.
+
+Both use the same random-code-plus-secret-token pattern and live in their
+own tables (`shares` and `syncs`) in the one database, so deploying once
+covers both features.
 
 ## Deploying it
 
@@ -42,25 +50,47 @@ npm run api:deploy    # publishes the Worker, prints its URL
 
 Take the URL that `api:deploy` prints (it looks like
 `https://budget-tracker-share.<your-subdomain>.workers.dev`) and paste it into
-the app under **Share → Share server address**, then tap **Turn on live
-sharing**. Copy the link it gives you and send that to whoever you want
-viewing your budget.
+the app. For **Share**: **Share → Share server address**, then tap **Turn on
+live sharing**, and send the link it gives you to whoever you want viewing
+your budget. For **Sync**: **Share → Sync devices → Start syncing on this
+device**, then paste the code it shows into **Join existing sync** on your
+other device.
+
+Already deployed the server before Sync existed? Re-run the same deploy (the
+GitHub Action, or `npm run api:deploy` from a terminal) — it reapplies
+`schema.sql`, which is written with `IF NOT EXISTS`, so it adds the new
+`syncs` table alongside your existing one without touching any share links
+already in use.
 
 ## What it costs
 
-Nothing, at the size this is built for. One row is overwritten per share link
-regardless of how often you edit your budget, so a household easily stays
+Nothing, at the size this is built for. A share's row is overwritten in
+place regardless of how often you edit your budget, so even active use stays
 inside Cloudflare's free allowances — Workers' free plan covers 100,000
-requests a day, and D1's free tier is far more storage than a few kilobytes of
-JSON per link will ever use.
+requests a day, and D1's free tier is far more storage than this will ever
+need. Sync polls more often (every 20 seconds per linked device while the
+app is open, in each direction) and its row holds your full history rather
+than one month, but two devices polling that often is still a small fraction
+of the free daily request allowance.
 
 ## How access works
 
-There is no password on either side. Creating a share returns a token that
-only your own app keeps, used to authenticate every push of a new snapshot.
-The link's code is the only thing gating who can *view* it — there is no way
-to write through the viewer page, only read. That is a deliberate trade for
-sharing a household budget with someone you trust, but be clear-eyed about it:
-anyone who gets the link (or it gets forwarded on) can see everything in the
-snapshot for as long as sharing stays on. Turning off sharing in the app
-deletes the share on the server, and the link stops working immediately.
+**Share** has no password on either side. Creating a share returns a token
+that only your own app keeps, used to authenticate every push of a new
+snapshot. The link's code is the only thing gating who can *view* it — there
+is no way to write through the viewer page, only read. That is a deliberate
+trade for sharing a household budget with someone you trust, but be
+clear-eyed about it: anyone who gets the link (or it gets forwarded on) can
+see everything in the snapshot for as long as sharing stays on. Turning off
+sharing in the app deletes the share on the server, and the link stops
+working immediately.
+
+**Sync** is stricter, because it holds everything rather than a read-only
+snapshot: the code alone is *not* enough to read it — every request, reads
+included, needs the same secret token that's needed to write. That token is
+exactly what the app shows you as the "sync code" to copy from one device to
+another, so treat it like a password rather than something to forward
+around; anyone who has it has full read/write access to that budget, Net
+Worth included, for as long as the sync stays linked. Unlinking a device in
+the app only removes that device's own copy of the code — it doesn't revoke
+the sync itself, since other devices may still be using it.

@@ -121,6 +121,19 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
   exactly as it always has — fully usable, nothing shared. Whoever opens the
   link sees your numbers update as you edit (polled every 20 seconds), with
   no way to change anything from their end.
+- **Sync devices** — a second mode under the same tab, for keeping this same
+  budget updating live on more than one device of your own (phone and
+  desktop, say), using the same server as Share. Unlike Share, this is
+  two-way — either device can edit, and it includes everything, including
+  Net Worth. Start it on one device, then paste the sync code it shows into
+  "Join existing sync" on the other (this replaces that device's local data
+  with the synced copy, so back up first if it already has data of its own
+  worth keeping). From then on it's push-on-edit plus a 20-second poll in
+  each direction, with no per-field merge — whichever device saved most
+  recently wins if you edit the same thing on both before they've synced.
+  Reading requires the same secret as writing (unlike a Share link, where
+  the code alone is enough to view it) — see "How access works" in
+  `api/README.md` for what that code actually protects.
 - **Backup & restore** — export/import your data as a JSON file, under the
   gear icon.
 - **Dark by default**, matching the rest of this family of apps, with a Light

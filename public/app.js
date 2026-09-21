@@ -22,6 +22,7 @@ const state = {
   propertyTransactions: [],
   activeTab: 'overview',
   incomeSegment: 'income',
+  shareSegment: 'share',
   expenseFilter: 'all',
   expenseSearch: '',
   expenseSelectMode: false,
@@ -40,6 +41,13 @@ const state = {
 };
 
 let sharePushTimer = null;
+let syncPushTimer = null;
+let syncPullInterval = null;
+// Set while a pull's data is being written back into the local store, so
+// the refreshAll() that follows doesn't itself queue a push straight back up
+// - without this, two idle devices would keep re-pushing the same data back
+// and forth to each other forever.
+let applyingSyncPull = false;
 
 // Transient state for the CSV import flow - a parsed file and the choices
 // made about it, alive only while that modal is open. Not part of `state`
@@ -928,6 +936,32 @@ async function renderShare() {
   }
 }
 
+async function renderSync() {
+  const cfg = await db.getSync();
+  const setup = document.getElementById('sync-setup');
+  const board = document.getElementById('sync-board');
+  if (!cfg) {
+    setup.classList.remove('hidden');
+    board.classList.add('hidden');
+    return;
+  }
+  setup.classList.add('hidden');
+  board.classList.remove('hidden');
+  document.getElementById('sync-enabled-toggle').checked = !!cfg.enabled;
+  document.getElementById('sync-code-value').textContent = cfg.token;
+  const stateEl = document.getElementById('sync-sync-state');
+  if (!cfg.enabled) {
+    stateEl.textContent = 'Sync is off - changes here will not go anywhere until it is back on.';
+    stateEl.classList.add('warn');
+  } else if (cfg.lastError) {
+    stateEl.textContent = `Could not sync: ${cfg.lastError}`;
+    stateEl.classList.add('warn');
+  } else {
+    stateEl.textContent = `Last synced ${timeAgo(cfg.lastSyncedAt)}`;
+    stateEl.classList.remove('warn');
+  }
+}
+
 // ---- Dispatch ----
 
 function render() {
@@ -942,7 +976,11 @@ function render() {
   }
   if (state.activeTab === 'budgets') renderBudgets();
   if (state.activeTab === 'expenses') renderExpenses();
-  if (state.activeTab === 'share') renderShare();
+  if (state.activeTab === 'share') {
+    renderShare();
+    renderSync();
+    applyShareSegment();
+  }
 
   const catSelect = document.getElementById('expense-category-select');
   catSelect.innerHTML = `<option value="">Uncategorized</option>` +
@@ -956,6 +994,14 @@ function render() {
     state.propertyTypes.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
 
   queueSharePush();
+  queueSyncPush();
+}
+
+function applyShareSegment() {
+  document.getElementById('share-panel-section').classList.toggle('hidden', state.shareSegment !== 'share');
+  document.getElementById('sync-panel-section').classList.toggle('hidden', state.shareSegment !== 'sync');
+  document.getElementById('seg-share-btn').classList.toggle('active', state.shareSegment === 'share');
+  document.getElementById('seg-sync-btn').classList.toggle('active', state.shareSegment === 'sync');
 }
 
 // ---- Live share snapshot ----
@@ -1004,6 +1050,42 @@ function queueSharePush() {
     await share.pushSnapshot(snapshot);
     if (state.activeTab === 'share') renderShare();
   }, 800);
+}
+
+// ---- Two-way sync ----
+// Push side: debounced the same way as Share's, for the same reason (a burst
+// of edits should send one push, not one per keystroke). Sends the raw
+// records, not a computed snapshot - unlike Share's viewer, the device on
+// the other end needs to keep editing this data, not just display it.
+function queueSyncPush() {
+  if (applyingSyncPull) return;
+  clearTimeout(syncPushTimer);
+  syncPushTimer = setTimeout(async () => {
+    if (!(await sync.isEnabled())) return;
+    const payload = await db.getSyncPayload();
+    await sync.push(payload);
+    if (state.activeTab === 'share') renderSync();
+  }, 800);
+}
+
+// Pull side: nothing about editing on THIS device would ever tell it to go
+// looking for a change made on another one, so this polls on an interval
+// instead - the same 20s cadence Share's viewer already polls at.
+function startSyncPolling() {
+  if (syncPullInterval) return;
+  syncPullInterval = setInterval(async () => {
+    if (!(await sync.isEnabled())) return;
+    const cfgBefore = await db.getSync();
+    const result = await sync.pull();
+    if (result.applied && result.updatedAt > (cfgBefore.lastRemoteUpdatedAt || 0)) {
+      applyingSyncPull = true;
+      await db.applySyncPayload(result.data);
+      await refreshAll();
+      applyingSyncPull = false;
+    } else if (state.activeTab === 'share') {
+      renderSync();
+    }
+  }, 20000);
 }
 
 // ---- Modals ----
@@ -1821,6 +1903,80 @@ function wireEvents() {
     }
   });
 
+  // Share/Sync segmented control
+  document.getElementById('seg-share-btn').addEventListener('click', () => {
+    state.shareSegment = 'share';
+    applyShareSegment();
+  });
+  document.getElementById('seg-sync-btn').addEventListener('click', () => {
+    state.shareSegment = 'sync';
+    applyShareSegment();
+  });
+
+  // Sync tab
+  document.getElementById('sync-start-btn').addEventListener('click', async () => {
+    const serverUrl = document.getElementById('sync-server').value.trim();
+    const status = document.getElementById('sync-setup-status');
+    if (!serverUrl) { status.textContent = 'Enter the server address first.'; return; }
+    status.textContent = 'Connecting…';
+    try {
+      await sync.probe(serverUrl);
+      await sync.start({ serverUrl, label: 'Budget Tracker' });
+      // Seed the sync with this device's current data right away, rather
+      // than waiting for the debounced push - a second device could join
+      // (and pull) before that timer fires otherwise.
+      await sync.push(await db.getSyncPayload());
+      status.textContent = '';
+      await renderSync();
+    } catch (err) {
+      status.textContent = err.message || 'Could not start syncing.';
+    }
+  });
+  document.getElementById('sync-join-btn').addEventListener('click', async () => {
+    const serverUrl = document.getElementById('sync-join-server').value.trim();
+    const raw = document.getElementById('sync-join-code').value.trim();
+    const status = document.getElementById('sync-setup-status');
+    const dot = raw.indexOf('.');
+    if (!serverUrl || dot < 1) { status.textContent = 'Enter the server address and the full sync code.'; return; }
+    if (!confirm("This replaces this device's local data with the synced copy. Continue?")) return;
+    status.textContent = 'Connecting…';
+    try {
+      const code = raw.slice(0, dot);
+      const secret = raw.slice(dot + 1);
+      const { data } = await sync.join({ serverUrl, code, secret });
+      applyingSyncPull = true;
+      await db.applySyncPayload(data);
+      applyingSyncPull = false;
+      status.textContent = '';
+      await refreshAll();
+    } catch (err) {
+      status.textContent = err.message || 'Could not join that sync.';
+    }
+  });
+  document.getElementById('sync-enabled-toggle').addEventListener('change', async e => {
+    await sync.setEnabled(e.target.checked);
+    if (e.target.checked) queueSyncPush();
+    await renderSync();
+  });
+  document.getElementById('sync-copy-btn').addEventListener('click', async () => {
+    const text = document.getElementById('sync-code-value').textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      const btn = document.getElementById('sync-copy-btn');
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    } catch {
+      alert('Could not copy automatically — select and copy the code manually.');
+    }
+  });
+  document.getElementById('sync-disable-btn').addEventListener('click', async () => {
+    if (confirm('Unlink this device from sync? Other devices still on it are unaffected.')) {
+      await sync.stop();
+      await renderSync();
+    }
+  });
+
   // Generic modal close
   document.querySelectorAll('[data-close-modal]').forEach(el => {
     el.addEventListener('click', () => closeModal(el.dataset.closeModal));
@@ -1878,4 +2034,5 @@ function wireEvents() {
   });
   wireEvents();
   await refreshAll();
+  startSyncPolling();
 })();

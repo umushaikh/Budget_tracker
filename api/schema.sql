@@ -12,3 +12,17 @@ CREATE TABLE IF NOT EXISTS shares (
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
 );
+
+-- One row per two-way sync link between a person's own devices. Unlike
+-- `shares` above, reading this requires the same secret token as writing it
+-- (see authenticate() in src/index.js) - it holds the full editable dataset,
+-- including net worth, so the code alone is deliberately not enough to read
+-- it the way a share link's code is.
+CREATE TABLE IF NOT EXISTS syncs (
+  code            TEXT PRIMARY KEY,
+  token_hash      TEXT NOT NULL,
+  label           TEXT NOT NULL DEFAULT '',
+  data_json       TEXT NOT NULL DEFAULT '{}',
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL
+);

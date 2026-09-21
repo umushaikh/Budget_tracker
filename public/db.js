@@ -36,6 +36,17 @@ function clampSharePct(value) {
 
 const PROPERTY_TYPES = ['Studio', '1 Bedroom', '2 Bedroom', '3 Bedroom', '4+ Bedroom', 'Villa', 'Townhouse', 'Penthouse', 'Office', 'Other'];
 
+// Everything that counts as "your data" for two-way sync between devices -
+// deliberately not `settings` (each device keeps its own theme), `share`, or
+// `sync` itself (a device's own share/sync credentials must never travel
+// inside the data they authenticate, or pulling a sync would overwrite the
+// very credentials being used to pull it).
+const SYNC_FIELDS = [
+  'incomeSources', 'properties', 'propertyTransactions', 'propertyTypes',
+  'categories', 'sheets', 'expenses', 'investments', 'investmentCategories',
+  'cashAccounts', 'receivables', 'payables', 'importRules', 'csvImportMapping'
+];
+
 function categoryColor(categories, categoryId) {
   const idx = categories.findIndex(c => c.id === categoryId);
   return CATEGORY_PALETTE[(idx < 0 ? 0 : idx) % CATEGORY_PALETTE.length];
@@ -98,6 +109,7 @@ function seedStore() {
     importRules: [], // [{ id, keyword, categoryId }] - "any description containing keyword" -> categoryId
     csvImportMapping: null, // { headerSignature, dateCol, amountCol, descCol, negativeIsSpend } - remembered per statement format
     share: null, // { serverUrl, code, token, enabled }
+    sync: null, // { serverUrl, code, token, enabled, lastSyncedAt, lastRemoteUpdatedAt } - see SYNC_FIELDS
     calendarMonths: true
   };
 }
@@ -193,6 +205,7 @@ function loadDb() {
       if (!parsed.importRules) parsed.importRules = [];
       if (parsed.csvImportMapping === undefined) parsed.csvImportMapping = null;
       if (parsed.share === undefined) parsed.share = null;
+      if (parsed.sync === undefined) parsed.sync = null;
       migrateToCalendarMonths(parsed);
       migratePropertyIncomeFields(parsed);
       migrateInvestmentSharePct(parsed);
@@ -795,6 +808,59 @@ const db = {
   async clearShare() {
     const store = loadDb();
     store.share = null;
+    saveDb(store);
+  },
+
+  // ---- Sync (two-way, between your own devices) ----
+
+  async getSync() {
+    return loadDb().sync;
+  },
+
+  async saveSync(sync) {
+    const store = loadDb();
+    store.sync = sync;
+    saveDb(store);
+    return store.sync;
+  },
+
+  async clearSync() {
+    const store = loadDb();
+    store.sync = null;
+    saveDb(store);
+  },
+
+  // The whole-database snapshot a push sends up. Not the same shape as
+  // exportData's backup file (that includes settings and is meant to be
+  // read by a human re-importing it); this is exactly what applySyncPayload
+  // below expects back.
+  async getSyncPayload() {
+    const store = loadDb();
+    const payload = {};
+    SYNC_FIELDS.forEach(f => { payload[f] = store[f]; });
+    return payload;
+  },
+
+  // Replaces the local copy of every synced collection with whatever the
+  // other device last pushed - whole-database last-write-wins, not a
+  // per-record merge, so a change made on both devices in the same window
+  // before either synced has one of them lose silently. Re-runs the same
+  // migrations loadDb() always runs, in case the payload came from a device
+  // still running an older version of the app.
+  async applySyncPayload(payload) {
+    const store = loadDb();
+    SYNC_FIELDS.forEach(f => {
+      if (payload[f] !== undefined) store[f] = payload[f];
+    });
+    migrateToCalendarMonths(store);
+    migratePropertyIncomeFields(store);
+    migrateInvestmentSharePct(store);
+    migrateExpenseFields(store);
+    migratePropertyTransactionStatus(store);
+    if (!store.sheets.some(s => s.id === store.activeSheetId)) {
+      store.activeSheetId = store.sheets.length ? store.sheets[store.sheets.length - 1].id : currentMonthKey();
+      ensureSheet(store, store.activeSheetId);
+    }
     saveDb(store);
   },
 

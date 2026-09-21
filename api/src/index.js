@@ -58,7 +58,7 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
-async function authenticate(request, env) {
+async function authenticate(request, env, table) {
   const header = request.headers.get('authorization') || '';
   const raw = header.startsWith('Bearer ') ? header.slice(7) : '';
   const dot = raw.indexOf('.');
@@ -67,7 +67,7 @@ async function authenticate(request, env) {
   const secret = raw.slice(dot + 1);
   if (!code || !secret) return null;
 
-  const row = await env.DB.prepare('SELECT code, token_hash FROM shares WHERE code = ?').bind(code).first();
+  const row = await env.DB.prepare(`SELECT code, token_hash FROM ${table} WHERE code = ?`).bind(code).first();
   if (!row) return null;
   if (!safeEqual(row.token_hash, await sha256(secret))) return null;
   return row;
@@ -122,6 +122,64 @@ async function deleteShare(share, env, origin) {
   return json({ ok: true }, 200, origin);
 }
 
+// ---- Two-way sync between a person's own devices ----
+// Same shape as a share (a random code plus a hashed secret token), but
+// unlike a share link, reading requires the token too - this holds the full
+// editable dataset, including net worth, not a read-only public snapshot.
+// One writer at a time in practice (whichever device pushes last wins), no
+// per-field merge: fine for one person's own two devices, not a multi-user
+// tool.
+const MAX_SYNC_BYTES = 900 * 1024; // holds full history, not just one month like a share snapshot - stay clear of D1's ~1MB row limit
+
+async function createSync(request, env, origin) {
+  const body = await request.json().catch(() => ({}));
+  const label = String(body.label || '').trim().slice(0, 60);
+  const now = Date.now();
+
+  let code = null;
+  for (let attempt = 0; attempt < 5 && !code; attempt++) {
+    const candidate = randomCode();
+    const taken = await env.DB.prepare('SELECT 1 FROM syncs WHERE code = ?').bind(candidate).first();
+    if (!taken) code = candidate;
+  }
+  if (!code) return fail('Could not allocate a sync code, try again', 503, origin);
+
+  const secret = randomToken();
+  await env.DB.prepare(
+    'INSERT INTO syncs (code, token_hash, label, data_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(code, await sha256(secret), label, '{}', now, now).run();
+
+  return json({ code, token: `${code}.${secret}` }, 201, origin);
+}
+
+async function getSyncData(sync, env, origin) {
+  const row = await env.DB.prepare('SELECT data_json, updated_at FROM syncs WHERE code = ?').bind(sync.code).first();
+  if (!row) return fail('No sync found', 404, origin);
+  let data = {};
+  try {
+    data = JSON.parse(row.data_json || '{}');
+  } catch {
+    // Malformed or empty - hand back an empty dataset rather than an error.
+  }
+  return json({ data, updatedAt: row.updated_at }, 200, origin);
+}
+
+async function putSyncData(request, sync, env, origin) {
+  const body = await request.json().catch(() => ({}));
+  const dataJson = JSON.stringify(body.data ?? {});
+  if (dataJson.length > MAX_SYNC_BYTES) return fail('That data is too large to sync', 413, origin);
+
+  const now = Date.now();
+  await env.DB.prepare('UPDATE syncs SET data_json = ?, updated_at = ? WHERE code = ?')
+    .bind(dataJson, now, sync.code).run();
+  return json({ ok: true, updatedAt: now }, 200, origin);
+}
+
+async function deleteSync(sync, env, origin) {
+  await env.DB.prepare('DELETE FROM syncs WHERE code = ?').bind(sync.code).run();
+  return json({ ok: true }, 200, origin);
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('origin') || '*';
@@ -143,9 +201,18 @@ export default {
       }
 
       if (path === '/api/share' && (method === 'PUT' || method === 'DELETE')) {
-        const share = await authenticate(request, env);
+        const share = await authenticate(request, env, 'shares');
         if (!share) return fail('Not authorized', 401, origin);
         return method === 'PUT' ? await putSnapshot(request, share, env, origin) : await deleteShare(share, env, origin);
+      }
+
+      if (path === '/api/sync' && method === 'POST') return await createSync(request, env, origin);
+
+      if (path === '/api/sync' && (method === 'GET' || method === 'PUT' || method === 'DELETE')) {
+        const sync = await authenticate(request, env, 'syncs');
+        if (!sync) return fail('Not authorized', 401, origin);
+        if (method === 'GET') return await getSyncData(sync, env, origin);
+        return method === 'PUT' ? await putSyncData(request, sync, env, origin) : await deleteSync(sync, env, origin);
       }
 
       return fail('Not found', 404, origin);
