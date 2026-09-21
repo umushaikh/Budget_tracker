@@ -288,7 +288,15 @@ async function handlePdfFileSelected(file) {
     const lines = await extractLinesFromPdf(buffer);
     const rawRows = parseTransactionLines(lines);
     if (!rawRows.length) {
-      alert('Could not find any transaction lines in that PDF. It may be a scanned image rather than real text, or a layout this can\'t read yet - a CSV export from your bank is more reliable if this keeps not working.');
+      // Surfaces exactly what pdf.js actually extracted, so a layout the
+      // parser can't handle can be diagnosed and fixed from a screenshot of
+      // this alert - without that, "it doesn't find anything" is a dead end
+      // to debug blind, since PDF layouts vary too much to guess at.
+      const nonEmpty = lines.map(l => l.trim()).filter(Boolean);
+      const sample = nonEmpty.slice(0, 15).map(l => l.length > 100 ? l.slice(0, 100) + '…' : l).join('\n');
+      alert(sample
+        ? `Could not find any transaction lines in that PDF. Here is what was actually extracted from it - screenshot this and send it over so the parser can be fixed for this layout:\n\n${sample}`
+        : 'Could not find any transaction lines in that PDF - nothing at all was extracted from it, which usually means it is a scanned image rather than real selectable text. A CSV export from your bank is more reliable if this keeps not working.');
       return;
     }
     csvImport = { source: 'pdf' };
