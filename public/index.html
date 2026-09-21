@@ -154,6 +154,7 @@
             <div class="budget-remaining-label">net (collected &minus; costs)</div>
             <div class="budget-stats">
               <div class="budget-stat"><span id="manage-payments-total">0</span><label>Collected</label></div>
+              <div class="budget-stat"><span id="manage-pending-total">0</span><label>Upcoming</label></div>
               <div class="budget-stat"><span id="manage-costs-total">0</span><label>Costs</label></div>
             </div>
           </div>
@@ -161,6 +162,7 @@
           <div id="manage-filter" class="chip-row">
             <button type="button" class="chip active" data-filter="all">All</button>
             <button type="button" class="chip" data-filter="payment">Payments</button>
+            <button type="button" class="chip" data-filter="pending">Pending</button>
             <button type="button" class="chip" data-filter="cost">Costs</button>
           </div>
 
@@ -346,15 +348,21 @@
     <form id="property-transaction-form">
       <label class="field">Type
         <select name="type">
-          <option value="payment">Rent payment received</option>
+          <option value="payment">Rent payment / cheque</option>
           <option value="cost">Maintenance / cost</option>
+        </select>
+      </label>
+      <label class="field" id="property-transaction-status-row">Status
+        <select name="status">
+          <option value="received">Received</option>
+          <option value="pending">Pending — future cheque, not received yet</option>
         </select>
       </label>
       <div class="field-row">
         <label class="field">Amount<input name="amount" type="number" step="any" min="0" required /></label>
         <label class="field">Date<input name="date" type="date" required /></label>
       </div>
-      <label class="field">Note (optional)<input name="note" type="text" maxlength="140" placeholder="e.g. September rent, AC repair" /></label>
+      <label class="field">Note (optional)<input name="note" type="text" maxlength="140" placeholder="e.g. September rent, cheque #1234" /></label>
       <button type="submit" class="primary-btn full">Save</button>
       <button type="button" id="property-transaction-delete" class="danger-btn full hidden">Delete</button>
     </form>

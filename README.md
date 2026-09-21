@@ -34,9 +34,12 @@ the link can view it live. Nothing leaves your phone unless you turn that on.
     gross/service-charge projection above (that stays a simple yearly
     estimate; this is the actual history). Pick an apartment from the chip
     row, log payments and costs with a date, amount and note, filter by
-    type, and see collected / costs / net for that property. Deleting an
-    apartment removes its ledger with it — there's nothing left for it to
-    attach to.
+    type, and see collected / costs / net for that property. A rent payment
+    can be logged as **pending** — a future/post-dated cheque you're
+    expecting but haven't received or cleared yet — which shows separately
+    as "Upcoming" and stays out of Collected and net until you tap **Mark
+    received** (or edit it) once it actually clears. Deleting an apartment
+    removes its ledger with it — there's nothing left for it to attach to.
   - **Net Worth** — everything you own against everything you owe:
     investments by category (Real Estate, Stocks & Funds, Business, Gold,
     Vehicles, Crypto, Other, or add your own from the investment editor's +

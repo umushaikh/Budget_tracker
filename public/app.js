@@ -574,30 +574,53 @@ function renderManage() {
   ).join('');
 
   const all = state.propertyTransactions.filter(t => t.propertyId === state.manageSelectedPropertyId);
-  const payments = all.filter(t => t.type === 'payment').reduce((s, t) => s + t.amount, 0);
+  // Collected/net only count payments actually received - a pending cheque
+  // isn't money in hand yet, so it stays out of both until it's marked
+  // received (or its own date passes and you confirm it cleared).
+  const payments = all.filter(t => t.type === 'payment' && t.status !== 'pending').reduce((s, t) => s + t.amount, 0);
+  const pending = all.filter(t => t.type === 'payment' && t.status === 'pending').reduce((s, t) => s + t.amount, 0);
   const costs = all.filter(t => t.type === 'cost').reduce((s, t) => s + t.amount, 0);
   const net = payments - costs;
 
   document.getElementById('manage-net').textContent = formatMoney(net);
   document.getElementById('manage-net').classList.toggle('negative', net < 0);
   document.getElementById('manage-payments-total').textContent = formatMoney(payments);
+  document.getElementById('manage-pending-total').textContent = formatMoney(pending);
   document.getElementById('manage-costs-total').textContent = formatMoney(costs);
 
   document.querySelectorAll('#manage-filter .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === state.manageFilter));
 
-  const filtered = (state.manageFilter === 'all' ? all : all.filter(t => t.type === state.manageFilter))
+  const filtered = all
+    .filter(t => {
+      if (state.manageFilter === 'all') return true;
+      if (state.manageFilter === 'pending') return t.type === 'payment' && t.status === 'pending';
+      return t.type === state.manageFilter;
+    })
     .slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   document.getElementById('manage-transactions-list').innerHTML = filtered.length
-    ? filtered.map(t => `
+    ? filtered.map(t => {
+      const isPending = t.type === 'payment' && t.status === 'pending';
+      const label = t.type === 'payment' ? (isPending ? '🕒 Pending cheque' : '💰 Rent payment') : '🔧 Maintenance / cost';
+      return `
       <div class="entry-row">
         <button type="button" class="entry-info edit-property-transaction-btn" data-id="${t.id}">
-          <div class="entry-name">${t.type === 'payment' ? '💰 Rent payment' : '🔧 Maintenance / cost'}${t.note ? ' · ' + escapeHtml(t.note) : ''}</div>
+          <div class="entry-name">${label}${t.note ? ' · ' + escapeHtml(t.note) : ''}</div>
           <div class="entry-sub">${t.date}</div>
         </button>
-        <span class="entry-amount" style="${t.type === 'cost' ? 'color:var(--danger)' : ''}">${t.type === 'cost' ? '&minus;' : ''}${formatMoney(t.amount)}</span>
-      </div>`).join('')
+        ${isPending ? `<button type="button" class="secondary-btn small mark-received-btn" data-id="${t.id}">Mark received</button>` : ''}
+        <span class="entry-amount" style="color:${t.type === 'cost' ? 'var(--danger)' : isPending ? 'var(--warn-text)' : 'inherit'}">${t.type === 'cost' ? '&minus;' : ''}${formatMoney(t.amount)}</span>
+      </div>`;
+    }).join('')
     : `<div class="empty-hint">No entries in this filter.</div>`;
+}
+
+// The Status field (received / a future cheque you haven't gotten yet) only
+// means anything for a rent payment - a cost is always just something that
+// already happened - so it's hidden whenever "Maintenance / cost" is picked.
+function updatePropertyTransactionFormVisibility() {
+  const form = document.getElementById('property-transaction-form');
+  document.getElementById('property-transaction-status-row').classList.toggle('hidden', form.type.value !== 'payment');
 }
 
 function openPropertyTransactionModal(txn) {
@@ -607,12 +630,15 @@ function openPropertyTransactionModal(txn) {
   form.reset();
   if (txn) {
     form.type.value = txn.type;
+    form.status.value = txn.status || 'received';
     form.amount.value = txn.amount;
     form.date.value = txn.date;
     form.note.value = txn.note || '';
   } else {
     form.date.value = todayStr();
+    form.status.value = 'received';
   }
+  updatePropertyTransactionFormVisibility();
   document.getElementById('property-transaction-delete').classList.toggle('hidden', !txn);
   openModal('property-transaction-modal');
 }
@@ -1404,14 +1430,21 @@ function wireEvents() {
     renderManage();
   });
   document.getElementById('add-property-transaction-btn').addEventListener('click', () => openPropertyTransactionModal(null));
-  document.getElementById('manage-transactions-list').addEventListener('click', e => {
+  document.getElementById('property-transaction-form').type.addEventListener('change', updatePropertyTransactionFormVisibility);
+  document.getElementById('manage-transactions-list').addEventListener('click', async e => {
+    const markBtn = e.target.closest('.mark-received-btn');
+    if (markBtn) {
+      await db.markPropertyTransactionReceived(markBtn.dataset.id);
+      await refreshAll();
+      return;
+    }
     const btn = e.target.closest('.edit-property-transaction-btn');
     if (btn) openPropertyTransactionModal(state.propertyTransactions.find(t => t.id === btn.dataset.id));
   });
   document.getElementById('property-transaction-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const payload = { propertyId: state.manageSelectedPropertyId, type: f.get('type'), amount: f.get('amount'), date: f.get('date'), note: f.get('note') };
+    const payload = { propertyId: state.manageSelectedPropertyId, type: f.get('type'), status: f.get('status'), amount: f.get('amount'), date: f.get('date'), note: f.get('note') };
     if (state.editingPropertyTransaction) await db.updatePropertyTransaction(state.editingPropertyTransaction, payload);
     else await db.addPropertyTransaction(payload);
     closeModal('property-transaction-modal');

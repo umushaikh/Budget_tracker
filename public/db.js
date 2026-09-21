@@ -151,6 +151,15 @@ function migrateInvestmentSharePct(store) {
   });
 }
 
+// A rent payment logged before "pending" existed was always something that
+// had actually been received - there was no other kind yet - so it keeps
+// counting as Collected rather than being reclassified as a future cheque.
+function migratePropertyTransactionStatus(store) {
+  store.propertyTransactions.forEach(t => {
+    if (t.status === undefined) t.status = 'received';
+  });
+}
+
 // Expenses saved before `reward` (cashback/points earned on the purchase)
 // and `source` (manual/csv/pdf, so a bad statement import can be found and
 // bulk-removed later) existed get the defaults those fields would have had
@@ -188,6 +197,7 @@ function loadDb() {
       migratePropertyIncomeFields(parsed);
       migrateInvestmentSharePct(parsed);
       migrateExpenseFields(parsed);
+      migratePropertyTransactionStatus(parsed);
       return parsed;
     } catch {
       // fall through and reseed a fresh db below
@@ -335,7 +345,11 @@ const db = {
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   },
 
-  async addPropertyTransaction({ propertyId, type, date, amount, note }) {
+  // `status` only means anything for a rent payment - "pending" is a future
+  // cheque you're expecting but haven't received/cleared yet, kept out of
+  // Collected until you mark it received. A cost is always just something
+  // that already happened, so it's never anything but "received".
+  async addPropertyTransaction({ propertyId, type, date, amount, note, status }) {
     const store = loadDb();
     const txn = {
       id: uid(),
@@ -343,14 +357,15 @@ const db = {
       type: type === 'cost' ? 'cost' : 'payment',
       date: date || todayStr(),
       amount: Number(amount) || 0,
-      note: (note || '').trim()
+      note: (note || '').trim(),
+      status: type === 'cost' ? 'received' : (status === 'pending' ? 'pending' : 'received')
     };
     store.propertyTransactions.push(txn);
     saveDb(store);
     return txn;
   },
 
-  async updatePropertyTransaction(id, { type, date, amount, note }) {
+  async updatePropertyTransaction(id, { type, date, amount, note, status }) {
     const store = loadDb();
     const txn = store.propertyTransactions.find(t => t.id === id);
     if (!txn) return null;
@@ -358,6 +373,7 @@ const db = {
     txn.date = date || txn.date;
     txn.amount = Number(amount) || 0;
     txn.note = (note || '').trim();
+    txn.status = txn.type === 'cost' ? 'received' : (status === 'pending' ? 'pending' : 'received');
     saveDb(store);
     return txn;
   },
@@ -366,6 +382,17 @@ const db = {
     const store = loadDb();
     store.propertyTransactions = store.propertyTransactions.filter(t => t.id !== id);
     saveDb(store);
+  },
+
+  // One-tap version of editing a pending cheque just to flip its status once
+  // it actually clears, rather than reopening the full form for that alone.
+  async markPropertyTransactionReceived(id) {
+    const store = loadDb();
+    const txn = store.propertyTransactions.find(t => t.id === id);
+    if (!txn) return null;
+    txn.status = 'received';
+    saveDb(store);
+    return txn;
   },
 
   // ---- Net worth: investments ----
