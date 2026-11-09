@@ -270,6 +270,10 @@ body {
 
 .legend-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-top: 1px solid var(--border); }
 .legend-row:first-child { border-top: none; }
+button.legend-row { width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+button.legend-row:first-child { border-top: none; }
+button.legend-row:active { opacity: 0.6; }
+button.legend-row::after { content: '›'; color: var(--text-dim); margin-left: 2px; }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .legend-name { font-weight: 600; font-size: 14.5px; flex: 1; }
 .legend-value { font-size: 13.5px; color: var(--text-dim); font-weight: 600; }

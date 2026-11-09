@@ -18,6 +18,10 @@ const DEFAULT_INVESTMENT_CATEGORIES = [
   'Vehicles', 'Crypto', 'Other'
 ];
 
+// Can't be renamed or deleted: "Real Estate" drives the apartment link and
+// "Other" is where investments land when their category is removed.
+const PROTECTED_INVESTMENT_CATEGORIES = ['Real Estate', 'Other'];
+
 // A handful of distinct hues, reused in the same order everywhere a category
 // needs a color (budgets list, expenses pie, the shared viewer) so a category
 // never changes color between screens.
@@ -199,6 +203,7 @@ function loadDb() {
       if (!parsed.investments) parsed.investments = [];
       if (!parsed.investmentCategories) parsed.investmentCategories = [...DEFAULT_INVESTMENT_CATEGORIES];
       if (!parsed.investmentCategories.includes('Real Estate')) parsed.investmentCategories.unshift('Real Estate');
+      if (!parsed.investmentCategories.includes('Other')) parsed.investmentCategories.push('Other');
       if (!parsed.cashAccounts) parsed.cashAccounts = [];
       if (!parsed.receivables) parsed.receivables = [];
       if (!parsed.payables) parsed.payables = [];
@@ -424,9 +429,9 @@ const db = {
 
   // Adds a category if it's new (case-insensitively - "gold" and "Gold"
   // are the same category), or just returns the existing one it matches.
-  // No rename/delete here on purpose: investments reference a category by
-  // name, and "Real Estate" is load-bearing for the apartment link, so
-  // free-form renaming is left for later rather than risking either.
+  // "Real Estate" (apartment link) and "Other" (the fallback every
+  // investment drops into) are load-bearing, so they can't be renamed or
+  // deleted - see rename/deleteInvestmentCategory below.
   async addInvestmentCategory(name) {
     const store = loadDb();
     const clean = (name || '').trim();
@@ -436,6 +441,38 @@ const db = {
     store.investmentCategories.push(clean);
     saveDb(store);
     return clean;
+  },
+
+  // Renames a category and moves every investment in it across, so nothing
+  // is orphaned. Returns the new name. A name that matches a different
+  // existing category (case-insensitively) is refused rather than merged.
+  async renameInvestmentCategory(oldName, newName) {
+    const store = loadDb();
+    if (PROTECTED_INVESTMENT_CATEGORIES.includes(oldName)) {
+      throw new Error(`"${oldName}" can't be renamed.`);
+    }
+    const clean = (newName || '').trim();
+    if (!clean) throw new Error('Category name cannot be empty.');
+    const idx = store.investmentCategories.indexOf(oldName);
+    if (idx === -1) throw new Error('That category no longer exists.');
+    const clash = store.investmentCategories.find(c => c !== oldName && c.toLowerCase() === clean.toLowerCase());
+    if (clash) throw new Error(`There's already a category called "${clash}".`);
+    store.investmentCategories[idx] = clean;
+    store.investments.forEach(i => { if (i.category === oldName) i.category = clean; });
+    saveDb(store);
+    return clean;
+  },
+
+  // Removes a category; its investments move to "Other" instead of being
+  // deleted, so no value drops out of net worth.
+  async deleteInvestmentCategory(name) {
+    const store = loadDb();
+    if (PROTECTED_INVESTMENT_CATEGORIES.includes(name)) {
+      throw new Error(`"${name}" can't be deleted.`);
+    }
+    store.investmentCategories = store.investmentCategories.filter(c => c !== name);
+    store.investments.forEach(i => { if (i.category === name) i.category = 'Other'; });
+    saveDb(store);
   },
 
   // `value` is always the investment's full value; `sharePct` is how much of
@@ -920,6 +957,7 @@ const db = {
       ? investmentCategories
       : [...new Set([...DEFAULT_INVESTMENT_CATEGORIES, ...store.investments.map(i => i.category).filter(Boolean)])];
     if (!store.investmentCategories.includes('Real Estate')) store.investmentCategories.unshift('Real Estate');
+    if (!store.investmentCategories.includes('Other')) store.investmentCategories.push('Other');
     store.cashAccounts = Array.isArray(cashAccounts) ? cashAccounts : [];
     store.receivables = Array.isArray(receivables) ? receivables : [];
     store.payables = Array.isArray(payables) ? payables : [];

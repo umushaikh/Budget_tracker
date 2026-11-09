@@ -34,6 +34,7 @@ const state = {
   editingCategory: null,
   editingExpense: null,
   editingInvestment: null,
+  editingInvestmentCategory: null,
   editingCashAccount: null,
   editingReceivable: null,
   editingPayable: null,
@@ -481,12 +482,18 @@ function buildPie(segments) {
 function renderLegend(containerId, segments, total) {
   document.getElementById(containerId).innerHTML = segments.map(seg => {
     const pct = total > 0 ? Math.round((seg.value / total) * 100) : 0;
+    // A segment flagged with `category` is an investment category: the whole
+    // row is a button that opens the rename/delete editor.
+    const tag = seg.category ? 'button type="button"' : 'div';
+    const close = seg.category ? 'button' : 'div';
+    const attrs = seg.category ? ` data-category="${escapeHtml(seg.category)}"` : '';
+    const cls = seg.category ? 'legend-row edit-investment-category-row' : 'legend-row';
     return `
-      <div class="legend-row">
+      <${tag} class="${cls}"${attrs}>
         <span class="legend-dot" style="background:${seg.color}"></span>
         <span class="legend-name">${escapeHtml(seg.label)}</span>
         <span class="legend-value">${pct}% · <strong>${formatMoney(seg.value)}</strong></span>
-      </div>`;
+      </${close}>`;
   }).join('');
 }
 
@@ -726,6 +733,7 @@ function renderNetWorth() {
   const segments = [
     ...state.investmentCategories.map(cat => ({
       label: cat,
+      category: cat,
       value: state.investments.filter(i => i.category === cat).reduce((s, i) => s + investmentNetValue(i), 0),
       color: investmentCategoryColor(cat)
     })),
@@ -1427,6 +1435,33 @@ function openInvestmentModal(investment, prefillPropertyId) {
   openModal('investment-modal');
 }
 
+// "Real Estate" and "Other" are load-bearing (see db.js), so for those the
+// editor opens read-only with a note instead of silently doing nothing.
+const PROTECTED_INVESTMENT_CATEGORIES = ['Real Estate', 'Other'];
+
+function openInvestmentCategoryModal(category) {
+  state.editingInvestmentCategory = category || null;
+  const form = document.getElementById('investment-category-form');
+  form.reset();
+  const protectedCat = !!category && PROTECTED_INVESTMENT_CATEGORIES.includes(category);
+  document.getElementById('investment-category-title').textContent = category ? 'Edit category' : 'Add category';
+  document.getElementById('investment-category-submit').textContent = category ? 'Save' : 'Add';
+  document.getElementById('investment-category-submit').classList.toggle('hidden', protectedCat);
+  document.getElementById('investment-category-delete').classList.toggle('hidden', !category || protectedCat);
+  form.name.disabled = protectedCat;
+  const noteEl = document.getElementById('investment-category-note');
+  if (protectedCat) {
+    noteEl.textContent = category === 'Real Estate'
+      ? '"Real Estate" is what links an investment to an apartment from Income, so it can\'t be renamed or deleted.'
+      : '"Other" is where investments go when their category is deleted, so it can\'t be renamed or deleted.';
+  } else if (category) {
+    noteEl.textContent = 'Deleting a category moves its investments to "Other" — nothing is removed from your net worth.';
+  }
+  noteEl.classList.toggle('hidden', !category);
+  if (category) form.name.value = category;
+  openModal('investment-category-modal');
+}
+
 function openCashAccountModal(account) {
   state.editingCashAccount = account ? account.id : null;
   document.getElementById('cash-account-title').textContent = account ? 'Edit account' : 'Add account';
@@ -1646,21 +1681,50 @@ function wireEvents() {
       await refreshAll();
     }
   });
-  document.getElementById('add-investment-category-btn').addEventListener('click', () => {
-    document.getElementById('investment-category-form').reset();
-    openModal('investment-category-modal');
+  document.getElementById('add-investment-category-btn').addEventListener('click', () => openInvestmentCategoryModal(null));
+  document.getElementById('edit-investment-category-btn').addEventListener('click', () => {
+    openInvestmentCategoryModal(document.getElementById('investment-form').category.value);
+  });
+  document.getElementById('networth-legend').addEventListener('click', e => {
+    const row = e.target.closest('.edit-investment-category-row');
+    if (row) openInvestmentCategoryModal(row.dataset.category);
   });
   document.getElementById('investment-category-form').addEventListener('submit', async e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const category = await db.addInvestmentCategory(f.get('name'));
-    await refreshAll();
-    // The investment editor is still open underneath - select the category
-    // that was just added rather than leaving whatever was picked before.
-    const categorySelect = document.getElementById('investment-form').category;
-    categorySelect.value = category;
-    updateInvestmentFormVisibility();
-    closeModal('investment-category-modal');
+    const editing = state.editingInvestmentCategory;
+    try {
+      const category = editing
+        ? await db.renameInvestmentCategory(editing, f.get('name'))
+        : await db.addInvestmentCategory(f.get('name'));
+      await refreshAll();
+      // The investment editor may still be open underneath - select the
+      // category that was just added/renamed rather than the old pick.
+      const investmentModalOpen = !document.getElementById('investment-modal').classList.contains('hidden');
+      if (investmentModalOpen) {
+        document.getElementById('investment-form').category.value = category;
+        updateInvestmentFormVisibility();
+      }
+      closeModal('investment-category-modal');
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  document.getElementById('investment-category-delete').addEventListener('click', async () => {
+    const editing = state.editingInvestmentCategory;
+    if (!editing || !confirm(`Delete "${editing}"? Its investments will move to "Other".`)) return;
+    try {
+      await db.deleteInvestmentCategory(editing);
+      await refreshAll();
+      const investmentModalOpen = !document.getElementById('investment-modal').classList.contains('hidden');
+      if (investmentModalOpen) {
+        document.getElementById('investment-form').category.value = 'Other';
+        updateInvestmentFormVisibility();
+      }
+      closeModal('investment-category-modal');
+    } catch (err) {
+      alert(err.message);
+    }
   });
 
   document.getElementById('add-cash-account-btn').addEventListener('click', () => openCashAccountModal(null));
