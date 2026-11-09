@@ -18,6 +18,26 @@ const DEFAULT_INVESTMENT_CATEGORIES = [
   'Vehicles', 'Crypto', 'Other'
 ];
 
+// Ledger entry kinds. `sign` is how the entry moves the balance of the thing
+// it applies to: cash accounts go up with deposits, receivables ("money owed
+// to you") go DOWN when someone pays you back and up when you lend more, and
+// payables ("money you owe") go down when you pay and up when you borrow more.
+const LEDGER_KINDS = {
+  deposit:      { accountType: 'cash',       sign: +1, label: 'Deposit' },
+  withdrawal:   { accountType: 'cash',       sign: -1, label: 'Withdrawal' },
+  transfer_in:  { accountType: 'cash',       sign: +1, label: 'Transfer in' },
+  transfer_out: { accountType: 'cash',       sign: -1, label: 'Transfer out' },
+  received:     { accountType: 'receivable', sign: -1, label: 'Paid back to you' },
+  lent_more:    { accountType: 'receivable', sign: +1, label: 'Lent more' },
+  paid:         { accountType: 'payable',    sign: -1, label: 'You paid' },
+  borrowed_more:{ accountType: 'payable',    sign: +1, label: 'Borrowed more' }
+};
+const LEDGER_COLLECTIONS = { cash: 'cashAccounts', receivable: 'receivables', payable: 'payables' };
+
+// The number a ledger entry moves, per account type.
+function ledgerBalanceField(accountType) { return accountType === 'cash' ? 'balance' : 'amount'; }
+function ledgerAccountName(accountType, account) { return accountType === 'cash' ? account.name : account.who; }
+
 // Can't be renamed or deleted: "Real Estate" drives the apartment link and
 // "Other" is where investments land when their category is removed.
 const PROTECTED_INVESTMENT_CATEGORIES = ['Real Estate', 'Other'];
@@ -48,7 +68,7 @@ const PROPERTY_TYPES = ['Studio', '1 Bedroom', '2 Bedroom', '3 Bedroom', '4+ Bed
 const SYNC_FIELDS = [
   'incomeSources', 'properties', 'propertyTransactions', 'propertyTypes',
   'categories', 'sheets', 'expenses', 'investments', 'investmentCategories',
-  'cashAccounts', 'receivables', 'payables', 'importRules', 'csvImportMapping'
+  'cashAccounts', 'receivables', 'payables', 'ledger', 'importRules', 'csvImportMapping'
 ];
 
 function categoryColor(categories, categoryId) {
@@ -110,6 +130,7 @@ function seedStore() {
     cashAccounts: [],
     receivables: [],
     payables: [],
+    ledger: [], // see LEDGER_KINDS - every change made to a net worth balance from the Ledger tab
     importRules: [], // [{ id, keyword, categoryId }] - "any description containing keyword" -> categoryId
     csvImportMapping: null, // { headerSignature, dateCol, amountCol, descCol, negativeIsSpend } - remembered per statement format
     share: null, // { serverUrl, code, token, enabled }
@@ -207,6 +228,7 @@ function loadDb() {
       if (!parsed.cashAccounts) parsed.cashAccounts = [];
       if (!parsed.receivables) parsed.receivables = [];
       if (!parsed.payables) parsed.payables = [];
+      if (!parsed.ledger) parsed.ledger = [];
       if (!parsed.importRules) parsed.importRules = [];
       if (parsed.csvImportMapping === undefined) parsed.csvImportMapping = null;
       if (parsed.share === undefined) parsed.share = null;
@@ -228,6 +250,40 @@ function loadDb() {
 
 function saveDb(store) {
   localStorage.setItem(DB_KEY, JSON.stringify(store));
+}
+
+function applyLedgerEntry(store, { kind, accountId, amount, date, note, transferId }) {
+  const spec = LEDGER_KINDS[kind];
+  if (!spec) throw new Error('Unknown transaction type.');
+  const value = Math.round(Number(amount) * 100) / 100;
+  if (!isFinite(value) || value <= 0) throw new Error('Enter an amount greater than zero.');
+  const account = store[LEDGER_COLLECTIONS[spec.accountType]].find(a => a.id === accountId);
+  if (!account) throw new Error('That account no longer exists.');
+  const field = ledgerBalanceField(spec.accountType);
+  const name = ledgerAccountName(spec.accountType, account);
+  const delta = spec.sign * value;
+  const after = Math.round(((account[field] || 0) + delta) * 100) / 100;
+  if (after < 0) {
+    throw new Error(spec.accountType === 'cash'
+      ? `"${name}" only has ${account[field]} - that would take it below zero.`
+      : `That's more than the ${account[field]} listed for "${name}".`);
+  }
+  account[field] = after;
+  const entry = {
+    id: uid(),
+    date: date || todayStr(),
+    accountType: spec.accountType,
+    accountId,
+    accountName: name,
+    kind,
+    delta,
+    balanceAfter: after,
+    note: (note || '').trim(),
+    transferId: transferId || null,
+    createdAt: Date.now()
+  };
+  store.ledger.push(entry);
+  return entry;
 }
 
 const db = {
@@ -901,6 +957,78 @@ const db = {
     saveDb(store);
   },
 
+  // ---- Ledger: transactions against net worth balances ----
+
+  async getLedger() {
+    return loadDb().ledger;
+  },
+
+  // Applies one entry to its account's balance and records it. Refuses
+  // anything that would push a balance below zero (withdrawing more than is
+  // there, or repaying more than is owed) rather than silently clamping.
+  // For a loan entry (paid back / lent more / you paid / borrowed more),
+  // `counterAccountId` optionally names the cash account the money actually
+  // went into or came out of; that second entry is linked to the first by a
+  // shared transferId, so the two are applied and deleted together.
+  async addLedgerEntry({ kind, accountId, amount, date, note, counterAccountId }) {
+    const store = loadDb();
+    const spec = LEDGER_KINDS[kind];
+    if (counterAccountId && (!spec || spec.accountType === 'cash')) {
+      throw new Error('A linked cash account only applies to money owed to or by you.');
+    }
+    const transferId = counterAccountId ? uid() : null;
+    const entry = applyLedgerEntry(store, { kind, accountId, amount, date, note, transferId });
+    if (counterAccountId) {
+      // Money you receive (paid back, or a new loan) goes INTO the account;
+      // money you hand over (lending more, paying a debt) comes OUT of it.
+      const cashKind = (kind === 'received' || kind === 'borrowed_more') ? 'deposit' : 'withdrawal';
+      applyLedgerEntry(store, { kind: cashKind, accountId: counterAccountId, amount, date, note, transferId });
+    }
+    saveDb(store);
+    return entry;
+  },
+
+  // Moves money between two cash accounts as two linked entries, applied
+  // together or not at all.
+  async addTransfer({ fromId, toId, amount, date, note }) {
+    const store = loadDb();
+    if (!fromId || !toId || fromId === toId) throw new Error('Pick two different accounts.');
+    const transferId = uid();
+    const out = applyLedgerEntry(store, { kind: 'transfer_out', accountId: fromId, amount, date, note, transferId });
+    const into = applyLedgerEntry(store, { kind: 'transfer_in', accountId: toId, amount, date, note, transferId });
+    saveDb(store);
+    return [out, into];
+  },
+
+  // Deletes an entry AND undoes its effect on the balance. A transfer is
+  // always deleted as a pair. If the account has since been deleted there is
+  // nothing to undo; if undoing would push a balance below zero, it's refused.
+  async deleteLedgerEntry(id) {
+    const store = loadDb();
+    const entry = store.ledger.find(e => e.id === id);
+    if (!entry) return;
+    const doomed = entry.transferId ? store.ledger.filter(e => e.transferId === entry.transferId) : [entry];
+    doomed.forEach(e => {
+      const account = store[LEDGER_COLLECTIONS[e.accountType]].find(a => a.id === e.accountId);
+      if (!account) return;
+      const field = ledgerBalanceField(e.accountType);
+      const reverted = (account[field] || 0) - e.delta;
+      if (reverted < -0.005) {
+        throw new Error(`Can't delete this: undoing it would take "${ledgerAccountName(e.accountType, account)}" below zero. Delete the later entries first.`);
+      }
+    });
+    doomed.forEach(e => {
+      const account = store[LEDGER_COLLECTIONS[e.accountType]].find(a => a.id === e.accountId);
+      if (account) {
+        const field = ledgerBalanceField(e.accountType);
+        account[field] = Math.max(0, Math.round(((account[field] || 0) - e.delta) * 100) / 100);
+      }
+    });
+    const ids = new Set(doomed.map(e => e.id));
+    store.ledger = store.ledger.filter(e => !ids.has(e.id));
+    saveDb(store);
+  },
+
   // ---- Backup & restore ----
 
   async exportData() {
@@ -923,6 +1051,7 @@ const db = {
       cashAccounts: store.cashAccounts,
       receivables: store.receivables,
       payables: store.payables,
+      ledger: store.ledger,
       importRules: store.importRules
     };
   },
@@ -961,6 +1090,7 @@ const db = {
     store.cashAccounts = Array.isArray(cashAccounts) ? cashAccounts : [];
     store.receivables = Array.isArray(receivables) ? receivables : [];
     store.payables = Array.isArray(payables) ? payables : [];
+    store.ledger = Array.isArray(payload.ledger) ? payload.ledger : [];
     store.importRules = Array.isArray(importRules) ? importRules : [];
     // Re-derive each month's sheet from the imported expenses' own dates,
     // the same as the one-time migration - correct however old the backup is.

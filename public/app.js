@@ -20,6 +20,10 @@ const state = {
   receivables: [],
   payables: [],
   propertyTransactions: [],
+  ledger: [],
+  ledgerFilter: 'all',
+  ledgerLimit: 100,
+  editingLedgerEntry: null,
   activeTab: 'overview',
   incomeSegment: 'income',
   shareSegment: 'share',
@@ -807,6 +811,68 @@ function renderNetWorth() {
     : `<div class="empty-hint">You don't owe anything logged here.</div>`;
 }
 
+// ---- Render: Ledger ----
+
+function ledgerSorted() {
+  return state.ledger.slice().sort((a, b) =>
+    (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+function ledgerKindLabel(entry) {
+  const spec = LEDGER_KINDS[entry.kind];
+  return spec ? spec.label : entry.kind;
+}
+
+function renderLedger() {
+  // Cash in/out for the current month. Transfers between your own accounts
+  // are excluded - they move money, they don't earn or spend it - but a
+  // deposit/withdrawal linked to a loan repayment is a real cash movement.
+  const monthPrefix = todayStr().slice(0, 7);
+  let cashIn = 0, cashOut = 0;
+  state.ledger.forEach(e => {
+    if (!(e.date || '').startsWith(monthPrefix)) return;
+    if (e.kind === 'deposit') cashIn += e.delta;
+    if (e.kind === 'withdrawal') cashOut += -e.delta;
+  });
+  document.getElementById('ledger-in').textContent = formatMoney(cashIn);
+  document.getElementById('ledger-out').textContent = formatMoney(cashOut);
+
+  document.querySelectorAll('#ledger-filter .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === state.ledgerFilter));
+  const entries = ledgerSorted().filter(e => state.ledgerFilter === 'all' || e.accountType === state.ledgerFilter);
+  const shown = entries.slice(0, state.ledgerLimit);
+
+  document.getElementById('ledger-list').innerHTML = shown.length
+    ? shown.map(e => {
+      const isCash = e.accountType === 'cash';
+      const amount = formatMoney(Math.abs(e.delta));
+      // Cash shows a signed amount (money in / out). A loan entry shows the
+      // plain amount, since "down" is good news for a debt and bad news for
+      // something you're owed - the label says which it was.
+      const amountHtml = isCash
+        ? `<span class="entry-amount ${e.delta >= 0 ? 'amount-in' : 'amount-out'}">${e.delta >= 0 ? '+' : '−'}${amount}</span>`
+        : `<span class="entry-amount">${amount}</span>`;
+      const tail = isCash ? `balance ${formatMoney(e.balanceAfter)}` : `${formatMoney(e.balanceAfter)} left`;
+      const parts = [ledgerKindLabel(e), formatLedgerDate(e.date), tail];
+      if (e.transferId && !String(e.kind).startsWith('transfer')) parts.push('linked');
+      if (e.note) parts.push(e.note);
+      return `
+      <div class="entry-row">
+        <button type="button" class="entry-info ledger-entry-btn" data-id="${e.id}">
+          <div class="entry-name">${escapeHtml(e.accountName)}</div>
+          <div class="entry-sub">${parts.map(escapeHtml).join(' · ')}</div>
+        </button>
+        ${amountHtml}
+      </div>`;
+    }).join('')
+    : `<div class="empty-hint">${state.ledger.length ? 'Nothing in this filter.' : 'No transactions yet. Add one and the balance updates on the Net Worth tab.'}</div>`;
+  document.getElementById('ledger-more-btn').classList.toggle('hidden', entries.length <= state.ledgerLimit);
+}
+
+function formatLedgerDate(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return isNaN(d) ? (dateStr || '') : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 // ---- Render: Budgets ----
 
 function renderBudgets() {
@@ -992,6 +1058,7 @@ function render() {
   }
   if (state.activeTab === 'budgets') renderBudgets();
   if (state.activeTab === 'expenses') renderExpenses();
+  if (state.activeTab === 'ledger') renderLedger();
   if (state.activeTab === 'share') {
     renderShare();
     renderSync();
@@ -1503,6 +1570,94 @@ function openPayableModal(payable) {
   openModal('payable-modal');
 }
 
+// ---- Ledger modals ----
+
+function ledgerAccountsFor(accountType) {
+  if (accountType === 'cash') return state.cashAccounts.map(a => ({ id: a.id, label: a.name, balance: a.balance }));
+  if (accountType === 'receivable') return state.receivables.map(r => ({ id: r.id, label: r.who, balance: r.amount }));
+  return state.payables.map(p => ({ id: p.id, label: p.who, balance: p.amount }));
+}
+
+function fillLedgerSelect(select, accounts) {
+  select.innerHTML = accounts.map(a => `<option value="${a.id}">${escapeHtml(a.label)}</option>`).join('');
+}
+
+function updateLedgerBalanceHint() {
+  const form = document.getElementById('ledger-form');
+  const hint = document.getElementById('ledger-balance-hint');
+  const kind = form.kind.value;
+  const type = kind === 'transfer' ? 'cash' : LEDGER_KINDS[kind].accountType;
+  const account = ledgerAccountsFor(type).find(a => a.id === form.accountId.value);
+  hint.textContent = account
+    ? `${type === 'cash' ? 'Balance' : (type === 'receivable' ? 'Currently owed to you' : 'Currently owed by you')}: ${formatMoney(account.balance)}`
+    : '';
+}
+
+function updateLedgerForm() {
+  const form = document.getElementById('ledger-form');
+  const kind = form.kind.value;
+  const isTransfer = kind === 'transfer';
+  const type = isTransfer ? 'cash' : LEDGER_KINDS[kind].accountType;
+  const accounts = ledgerAccountsFor(type);
+
+  document.getElementById('ledger-account-label').textContent =
+    isTransfer ? 'From account' : (type === 'cash' ? 'Account' : (type === 'receivable' ? 'Who owes you' : 'Who you owe'));
+  fillLedgerSelect(form.accountId, accounts);
+
+  document.getElementById('ledger-to-row').classList.toggle('hidden', !isTransfer);
+  if (isTransfer) {
+    fillLedgerSelect(form.toId, accounts);
+    if (accounts.length > 1) form.toId.selectedIndex = 1;
+  }
+
+  const showCounter = !isTransfer && type !== 'cash';
+  document.getElementById('ledger-counter-row').classList.toggle('hidden', !showCounter);
+  if (showCounter) {
+    document.getElementById('ledger-counter-label').textContent =
+      { received: 'Deposited into', borrowed_more: 'Received into', lent_more: 'Lent from', paid: 'Paid from' }[kind];
+    form.counterAccountId.innerHTML = `<option value="">Don't change a cash account</option>` +
+      state.cashAccounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+  }
+
+  const errorEl = document.getElementById('ledger-error');
+  const needed = isTransfer ? 2 : 1;
+  const missing = accounts.length < needed;
+  if (missing) {
+    errorEl.textContent = isTransfer
+      ? 'You need at least two cash accounts to transfer between. Add them under Income › Net Worth.'
+      : `Nothing to choose yet. Add ${type === 'cash' ? 'a cash account' : (type === 'receivable' ? 'someone who owes you' : 'a debt')} under Income › Net Worth first.`;
+  }
+  errorEl.classList.toggle('hidden', !missing);
+  document.getElementById('ledger-save').disabled = missing;
+  updateLedgerBalanceHint();
+}
+
+function openLedgerModal(presetKind) {
+  const form = document.getElementById('ledger-form');
+  form.reset();
+  form.kind.value = presetKind || 'deposit';
+  form.date.value = todayStr();
+  updateLedgerForm();
+  openModal('ledger-modal');
+}
+
+function openLedgerEntryModal(entry) {
+  if (!entry) return;
+  state.editingLedgerEntry = entry.id;
+  const rows = [
+    ['Account', entry.accountName],
+    ['Type', ledgerKindLabel(entry)],
+    ['Amount', `${entry.delta >= 0 ? '+' : '−'}${formatMoney(Math.abs(entry.delta))}`],
+    ['Date', formatLedgerDate(entry.date)],
+    [entry.accountType === 'cash' ? 'Balance after' : 'Left after', formatMoney(entry.balanceAfter)]
+  ];
+  if (entry.note) rows.push(['Note', entry.note]);
+  if (entry.transferId) rows.push(['Linked', 'Deleting removes both sides']);
+  document.getElementById('ledger-entry-detail').innerHTML = rows
+    .map(([k, v]) => `<div class="ledger-detail-row"><span>${escapeHtml(k)}</span><span>${escapeHtml(v)}</span></div>`).join('');
+  openModal('ledger-entry-modal');
+}
+
 // ---- Data refresh ----
 
 async function refreshAll() {
@@ -1520,6 +1675,7 @@ async function refreshAll() {
   state.cashAccounts = all.cashAccounts;
   state.receivables = all.receivables;
   state.payables = all.payables;
+  state.ledger = all.ledger || [];
   state.propertyTransactions = all.propertyTransactions;
   render();
 }
@@ -1746,6 +1902,58 @@ function wireEvents() {
       await db.deleteCashAccount(state.editingCashAccount);
       closeModal('cash-account-modal');
       await refreshAll();
+    }
+  });
+
+  // Ledger tab
+  document.getElementById('add-ledger-btn').addEventListener('click', () => openLedgerModal('deposit'));
+  document.getElementById('add-transfer-btn').addEventListener('click', () => openLedgerModal('transfer'));
+  document.getElementById('ledger-filter').addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    state.ledgerFilter = chip.dataset.filter;
+    state.ledgerLimit = 100;
+    renderLedger();
+  });
+  document.getElementById('ledger-more-btn').addEventListener('click', () => {
+    state.ledgerLimit += 100;
+    renderLedger();
+  });
+  document.getElementById('ledger-list').addEventListener('click', e => {
+    const btn = e.target.closest('.ledger-entry-btn');
+    if (btn) openLedgerEntryModal(state.ledger.find(en => en.id === btn.dataset.id));
+  });
+  document.getElementById('ledger-kind').addEventListener('change', updateLedgerForm);
+  document.getElementById('ledger-account').addEventListener('change', updateLedgerBalanceHint);
+  document.getElementById('ledger-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const errorEl = document.getElementById('ledger-error');
+    try {
+      if (f.get('kind') === 'transfer') {
+        await db.addTransfer({ fromId: f.get('accountId'), toId: f.get('toId'), amount: f.get('amount'), date: f.get('date'), note: f.get('note') });
+      } else {
+        await db.addLedgerEntry({
+          kind: f.get('kind'), accountId: f.get('accountId'), amount: f.get('amount'), date: f.get('date'),
+          note: f.get('note'), counterAccountId: f.get('counterAccountId') || null
+        });
+      }
+      closeModal('ledger-modal');
+      await refreshAll();
+    } catch (err) {
+      errorEl.textContent = err.message || 'Could not save that.';
+      errorEl.classList.remove('hidden');
+    }
+  });
+  document.getElementById('ledger-entry-delete').addEventListener('click', async () => {
+    if (!state.editingLedgerEntry) return;
+    if (!confirm('Delete this transaction and undo its effect on the balance?')) return;
+    try {
+      await db.deleteLedgerEntry(state.editingLedgerEntry);
+      closeModal('ledger-entry-modal');
+      await refreshAll();
+    } catch (err) {
+      alert(err.message || 'Could not delete that.');
     }
   });
 

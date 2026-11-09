@@ -623,3 +623,11 @@ body.modal-open { overflow: hidden; }
 .viewer-head .brand { font-size: 20px; }
 .viewer-updated { font-size: 12px; color: var(--text-dim); margin-bottom: 18px; }
 .viewer-status { text-align: center; padding: 60px 20px; color: var(--text-dim); font-size: 14px; line-height: 1.6; }
+
+/* Ledger tab */
+.amount-in { color: var(--accent); }
+.amount-out { color: var(--danger); }
+.ledger-detail-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.ledger-detail-row:first-child { border-top: none; }
+.ledger-detail-row span:first-child { color: var(--text-dim); font-weight: 600; }
+.ledger-detail-row span:last-child { font-weight: 700; text-align: right; word-break: break-word; }
