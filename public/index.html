@@ -651,6 +651,24 @@
   </div>
 </div>
 
+<script>
+// Diagnostic: if the app script fails or never starts, say so on screen
+// (instead of a page that silently ignores taps).
+(function () {
+  function show(msg) {
+    var el = document.getElementById('diag-banner');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'diag-banner';
+      el.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#b00020;color:#fff;font:13px/1.4 -apple-system,system-ui,sans-serif;padding:10px 12px;white-space:pre-wrap;word-break:break-word';
+      (document.body || document.documentElement).appendChild(el);
+    }
+    el.textContent += (el.textContent ? '\n' : '') + msg;
+  }
+  window.addEventListener('error', function (e) { show('Error: ' + (e.message || 'unknown') + (e.filename ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : '')); });
+  window.addEventListener('unhandledrejection', function (e) { show('Error: ' + ((e.reason && e.reason.message) || e.reason)); });
+  setTimeout(function () { if (!window.__appReady) show('The app did not start. Open /rescue.html to save your data.'); }, 4000);
+})();
+</script>
 <script src="db.js"></script>
 <script src="share.js"></script>
 <script src="sync.js"></script>

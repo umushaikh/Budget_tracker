@@ -2105,6 +2105,7 @@ function wireEvents() {
     applyTheme(state.settings.theme || 'dark');
   });
   wireEvents();
+  window.__appReady = true;
   await refreshAll();
   startSyncPolling();
 })();
