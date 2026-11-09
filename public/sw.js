@@ -19,7 +19,14 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
+  // cache: 'reload' skips the browser's HTTP cache. Without it, GitHub Pages'
+  // short max-age can hand a just-installed worker the PREVIOUS deploy's files,
+  // so a bad deploy gets re-cached into the new version and sticks.
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(ASSETS.map(url => cache.add(new Request(url, { cache: 'reload' }))))
+    )
+  );
   self.skipWaiting();
 });
 
