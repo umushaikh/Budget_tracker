@@ -1435,9 +1435,9 @@ function openInvestmentModal(investment, prefillPropertyId) {
   openModal('investment-modal');
 }
 
-// "Real Estate" and "Other" are load-bearing (see db.js), so for those the
-// editor opens read-only with a note instead of silently doing nothing.
-const PROTECTED_INVESTMENT_CATEGORIES = ['Real Estate', 'Other'];
+// "Real Estate" and "Other" are load-bearing (PROTECTED_INVESTMENT_CATEGORIES,
+// declared in db.js, which loads first), so for those the editor opens
+// read-only with a note instead of silently doing nothing.
 
 function openInvestmentCategoryModal(category) {
   state.editingInvestmentCategory = category || null;
