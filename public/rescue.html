@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Budget Tracker – Rescue</title>
+<style>
+  body { font: 16px/1.5 -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; background: #111; color: #eee; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { color: #bbb; }
+  button { font: inherit; font-weight: 700; padding: 14px; width: 100%; margin: 8px 0; border: 0; border-radius: 12px; background: #35d07f; color: #062; }
+  button.alt { background: #333; color: #eee; }
+  #status { padding: 12px; border-radius: 10px; background: #1c1c1c; margin: 14px 0; }
+  textarea { width: 100%; height: 180px; background: #1c1c1c; color: #eee; border: 1px solid #333; border-radius: 10px; padding: 10px; box-sizing: border-box; font: 12px monospace; }
+</style>
+</head>
+<body>
+<h1>Budget Tracker rescue</h1>
+<p>This page does not use the app's code. It only reads what is saved in this browser and lets you copy it out. It never changes or deletes anything.</p>
+<div id="status">Checking…</div>
+<button id="download" disabled>Download backup file</button>
+<button id="copy" class="alt" disabled>Copy backup text</button>
+<textarea id="box" readonly placeholder="Your saved data will appear here"></textarea>
+<p><a href="./" style="color:#7d93ff">Back to the app</a></p>
+<script>
+(function () {
+  var statusEl = document.getElementById('status');
+  var box = document.getElementById('box');
+  var raw = null;
+  try { raw = localStorage.getItem('budgetTrackerDb'); } catch (e) { statusEl.textContent = 'This browser blocked access to saved data: ' + e.message; return; }
+  if (!raw) {
+    statusEl.textContent = 'No saved budget found in THIS browser. If you normally use the app from a home-screen icon or a different browser, open this page from there instead (same place you use the app).';
+    return;
+  }
+  var summary = '';
+  try {
+    var d = JSON.parse(raw);
+    var n = function (k) { return Array.isArray(d[k]) ? d[k].length : 0; };
+    summary = 'Found your data: ' + n('expenses') + ' expenses, ' + n('incomeSources') + ' income sources, ' + n('properties') + ' apartments, ' + n('investments') + ' investments, ' + n('cashAccounts') + ' cash accounts.';
+  } catch (e) { summary = 'Found saved data (' + raw.length + ' characters), but it could not be read as JSON. Copy it out anyway.'; }
+  statusEl.textContent = summary;
+  box.value = raw;
+  var dl = document.getElementById('download'), cp = document.getElementById('copy');
+  dl.disabled = false; cp.disabled = false;
+  dl.onclick = function () {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+    a.download = 'budget-tracker-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+  cp.onclick = function () {
+    box.select();
+    try { navigator.clipboard.writeText(raw).then(function () { cp.textContent = 'Copied ✓'; }, function () { document.execCommand('copy'); cp.textContent = 'Copied ✓'; }); }
+    catch (e) { document.execCommand('copy'); cp.textContent = 'Copied ✓'; }
+  };
+})();
+</script>
+</body>
+</html>
